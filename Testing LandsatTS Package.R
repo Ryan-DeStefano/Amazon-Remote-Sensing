@@ -44,6 +44,21 @@ test.pts.sf$sample_id <- paste0('S_', 1:n.pts)
 # Or use lsat_get_pixel_centers to get all pixels within the polygon
 pixel_list_test_poly <- lsat_get_pixel_centers(test_poly_sf, plot_map = TRUE)
 
+# Plot polygon with sample points
+leaflet() %>%
+  addProviderTiles('Esri.WorldImagery') %>%
+  addCircleMarkers(data=test.pts.sf, 
+                   color='white',
+                   opacity=0.9,
+                   fillColor='fuchsia',
+                   fillOpacity=0.75,
+                   weight=1,
+                   radius=5) %>%
+  addPolygons(data=test_poly_sf,
+              color='white',
+              weight=3) %>%
+  addScaleBar(options=scaleBarOptions(imperial=F))
+
 # Export time-series using lsat_export_ts(), will be saved to a lsat folder in google drive
 task_list <- lsat_export_ts(test.pts.sf)
 
