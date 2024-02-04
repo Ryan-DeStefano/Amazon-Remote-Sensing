@@ -4,3 +4,11 @@ Project focused on tracking greenness trends of certain vegetation in specified 
 **LandsatTS Walkthrough Folder:**
 
 Contains code walking through the usage of the R package, "LandsatTS". Follows directly the steps laid out in https://github.com/logan-berner/LandsatTS?tab=readme-ov-file#4-quantify-growing-season-characteristics
+
+**Brazil Folder:**
+
+Conatians code to trace specific areas of interest of the Amazon Rainforest in Brazil.
+
+**Brazil Folder:**
+
+Conatians code to trace specific areas of interest of the Amazon Rainforest in Peru.
