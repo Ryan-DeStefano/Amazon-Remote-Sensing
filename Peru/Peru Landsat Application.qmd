@@ -1,0 +1,247 @@
+---
+title: "Peru AOI Landsat Application"
+author: "Ryan DeStefano"
+format: 
+  html:
+    code-fold: true
+    code-line-numbers: true
+    code-tools: true
+    self-contained: true
+editor: source
+execute: 
+  cache: true
+---
+
+```{r}
+library(sf)
+library(dplyr)
+library(purrr)
+library(data.table)
+library(stringr)
+library(rgee)
+library(lwgeom)
+library(leaflet)
+library(LandsatTS)
+```
+
+```{r}
+# Path to the GeoJSON file
+geojson_file <- "C:/Users/Ryman/OneDrive/Documents/Thesis/PeruAOI No Tiles (Master)/PeruAOI (Master)/04 Dataset_Ucayali_Palm_V2.geojson"
+
+# Read the GeoJSON file
+main <- st_read(geojson_file)
+
+# Path to output shapefile (without file extension)
+output_shapefile <- "C:/Users/Ryman/OneDrive/Documents/Thesis/PeruAOI No Tiles (Master)/PeruAOI (Master)/04 Dataset_Ucayali_Palm_V2.shp"
+
+# Write the spatial data to a shapefile
+st_write(geojson_data, dsn = output_shapefile)
+```
+
+```{r}
+set.seed(27)
+
+main <- st_read(
+  "C:/Users/Ryman/OneDrive/Documents/Thesis/PeruAOI No Tiles (Master)/PeruAOI (Master)/04 Dataset_Ucayali_Palm_V2.shp")
+
+main <- st_make_valid(main)
+
+# Check the current coordinate reference system
+st_crs(main)
+
+# Transform to WGS84 (EPSG:4326)
+main <- st_transform(main, crs = 4326)
+
+# Number of sample points
+n.pts <- 1
+
+# Sample points
+test.pts.sf <- st_sample(x = main, size = n.pts) %>% st_sf()
+test.pts.sf$sample_id <- paste0('S_', 1:n.pts)
+
+leaflet() %>%
+  addProviderTiles('Esri.WorldImagery') %>%
+  addCircleMarkers(data=test.pts.sf, 
+                   color='white',
+                   opacity=0.9,
+                   fillColor='fuchsia',
+                   fillOpacity=0.75,
+                   weight=1,
+                   radius=5) %>%
+  addPolygons(data=main,
+              color='white',
+              weight=3) %>%
+  addScaleBar(options=scaleBarOptions(imperial=F))
+```
+
+```{r}
+main <- main[st_is_valid(main),]
+
+# Preallocate the areas vector
+areas <- numeric(nrow(main))
+
+# Loop through each geometry
+for (i in 1:nrow(main)) {
+  area <- st_area(main$geometry[i])
+  areas[i] <- area
+}
+
+main$AREA <- areas
+```
+
+```{r}
+top_10_peru <- main %>% 
+  arrange(desc(AREA)) %>%
+  slice_head(n = 10)
+
+# Define the number of points to sample from each polygon
+n.pts_per_polygon <- 25  # Change this value as needed
+
+# Create an empty tibble to store the sampled points
+test <- tibble(geometry = vector("list", nrow(top_10_peru) * n.pts_per_polygon),
+               sample_id = character(nrow(top_10_peru) * n.pts_per_polygon))
+
+# Initialize the sample ID counter
+sample_counter <- 1
+
+# Loop through each region to sample points
+for (i in 1:nrow(top_10_peru)) {
+  # Sample points from the i-th polygon
+  pts <- st_sample(x = top_10_peru[i, ], size = n.pts_per_polygon)
+  
+  # Convert the sampled points to their WKT representation
+  point_wkt <- st_as_text(pts)
+  
+  # Determine the indices to store the sampled points
+  start_index <- (i - 1) * n.pts_per_polygon + 1
+  end_index <- i * n.pts_per_polygon
+  
+  # Store the WKT representation of the sampled point geometries and sample IDs in the test tibble
+  test$geometry[start_index:end_index] <- point_wkt
+  test$sample_id[start_index:end_index] <- paste0('S_', sample_counter:(sample_counter + n.pts_per_polygon - 1))
+  
+  # Increment the sample ID counter
+  sample_counter <- sample_counter + n.pts_per_polygon
+}
+
+# Convert the test tibble to an sf object
+test_sf <- st_as_sf(test, wkt = "geometry", crs=4326)
+
+leaflet() %>%
+  addProviderTiles('Esri.WorldImagery') %>%
+  addCircleMarkers(data = test_sf, 
+                   color = 'white',
+                   opacity = 0.9,
+                   fillColor = 'fuchsia',
+                   fillOpacity = 0.75,
+                   weight = 1,
+                   radius = 5) %>%
+  addPolygons(data = top_10_peru,
+              color = 'white',
+              weight = 3) %>%
+  addScaleBar(options = scaleBarOptions(imperial = FALSE))
+```
+
+```{r}
+# lsat_get_pixel_centers is a way to get all pixel centers within a polygon, for this area its's not ideal becasue it extracts too many points, over 1 million points 
+pixel_list_test_poly <- lsat_get_pixel_centers(main$geometry[2], plot_map = FALSE)
+
+leaflet() %>%
+  addProviderTiles('Esri.WorldImagery') %>%
+  addCircleMarkers(data=pixel_list_test_poly, 
+                   color='white',
+                   opacity=0.9,
+                   fillColor='fuchsia',
+                   fillOpacity=0.75,
+                   weight=1,
+                   radius=5) %>%
+  addPolygons(data=main,
+              color='white',
+              weight=3) %>%
+  addScaleBar(options=scaleBarOptions(imperial=F))
+```
+
+```{r}
+task_list <- lsat_export_ts(test_sf)
+```
+
+```{r}
+lsat.dt <- do.call("rbind", lapply(c("Top_10_Peru_250.csv"), fread))
+```
+
+```{r}
+# Format the data
+lsat.dt <- lsat_format_data(lsat.dt)
+
+# Only keep observations where there was clear sky etc
+lsat.dt <- lsat_clean_data(lsat.dt, geom.max = 15, cloud.max = 80, sza.max = 60, filter.cfmask.snow = T, filter.cfmask.water = T, filter.jrc.water = T)
+```
+
+```{r}
+data.summary.dt <- lsat_summarize_data(lsat.dt)
+data.summary.dt
+```
+
+```{r, fig.width=10, fig.height=10}
+# Retrieve NDVI values
+lsat.dt <- lsat_calc_spectral_index(lsat.dt, si = 'evi')
+
+# Cross-calibrate NDVI among sensors using an approach based on Random Forest machine learning
+# Note: Need lots of observations for this to work
+lsat.dt <- lsat_calibrate_rf(lsat.dt, 
+                             band.or.si = 'evi', 
+                             min.obs = 5, 
+                             frac.train = 0.75, 
+                             overwrite.col = T, 
+                             write.output = F)
+```
+
+```{r}
+# Fit phenological models (cubic splines) to each time series (Took out vi.min arg)
+lsat.pheno.dt <- lsat_fit_phenological_curves(lsat.dt, si = 'evi', spar = .6)
+
+# Gives some summary stats on the phenological curve fits
+lsat.gs.dt <- lsat_summarize_growing_seasons(lsat.pheno.dt, si = 'evi', min.frac.of.max = 0.75)
+lsat.gs.dt
+```
+
+```{r}
+#Creates boxplots for num of Obs vs % diff from max observed NDVI
+lsat.gs.eval.dt <- lsat_evaluate_phenological_max(lsat.pheno.dt, si = 'evi', min.obs = 10, reps = 5, min.frac.of.max = 0.75, outdir = NA)
+```
+
+```{r}
+# Create data for and plot histogram of relative change in greeness
+lsat.trnds.dt <- lsat_calc_trend(lsat.gs.dt, si = 'evi.max', 2000:2020, sig = 0.1)
+lsat_plot_trend_hist(lsat.trnds.dt, xlim=c(-21,21))
+```
+
+```{r}
+# Create leaflet plot with trends imposed
+colors.dt <- data.table(trend.cat=c("greening","no_trend","browning"),
+                        trend.color=c("springgreen","white","orange"))
+
+lsat.trnds.dt <- lsat.trnds.dt[colors.dt, on='trend.cat']
+
+lsat.trnds.dt <- na.omit(lsat.trnds.dt)
+
+lsat.trnds.sf <- st_as_sf(lsat.trnds.dt,
+                          coords=c("longitude", "latitude"),
+                          crs=4326)
+
+leaflet() %>%
+  addProviderTiles('Esri.WorldImagery') %>%
+  addPolylines(data=top_10_peru, color='white', weight=3) %>%
+  addCircleMarkers(data=lsat.trnds.sf,
+                   color='white',
+                   weight=1,
+                   opacity=0.9,
+                   fillColor=~trend.color,
+                   fillOpacity=0.5,
+                   radius=~sqrt(abs(total.change.pcnt))*1) %>%
+  addLegend('bottomright',
+            colors=colors.dt$trend.color,
+            labels=colors.dt$trend.cat,
+            title='NDVImax trend',
+            opacity=1)
+```
