@@ -96,8 +96,7 @@ leaflet() %>%
 ```
 
 ```{r}
-task_list <- lsat_export_ts(test_sf)
-```
+task_list <- lsat_export_ts(test_sf, start_doy=1, end_doy=365)```
 
 ```{r}
 lsat.dt <- do.call("rbind", lapply(c("Top_10_Brazil_500_1.csv", "Top_10_Brazil_500_2.csv"), fread))
@@ -124,7 +123,7 @@ lsat.dt <- lsat_calc_spectral_index(lsat.dt, si = 'evi')
 # Note: Need lots of observations for this to work
 lsat.dt <- lsat_calibrate_rf(lsat.dt, 
                              band.or.si = 'evi', 
-                             doy.rng = 151:242, 
+                             doy.rng = 1:365, 
                              min.obs = 5, 
                              frac.train = 0.75, 
                              overwrite.col = T, 
@@ -132,12 +131,41 @@ lsat.dt <- lsat_calibrate_rf(lsat.dt,
 ```
 
 ```{r}
+# Filter years in the dataset if needed
+lsat.dt <- filter(lsat.dt, year >= 2010)
+
 # Fit phenological models (cubic splines) to each time series (Took out vi.min arg)
 lsat.pheno.dt <- lsat_fit_phenological_curves(lsat.dt, si = 'evi', spar = .6)
 
 # Gives some summary stats on the phenological curve fits
 lsat.gs.dt <- lsat_summarize_growing_seasons(lsat.pheno.dt, si = 'evi', min.frac.of.max = 0.75)
 lsat.gs.dt
+```
+
+The code below is fitting curves for the mean value of evi at each time frame within each plantation. Each graph represents a plantation.
+
+```{r}
+# Define a function to extract group numbers from sample IDs
+extract_group <- function(sample_id) {
+  group_number <- as.numeric(sub("S_", "", sample_id))
+  higher_order_group <- ((group_number - 1) %/% 10) + 1
+  return(higher_order_group)
+}
+
+# Mutate the lsat.dt data frame by adding a 'group.id' column using the 'extract_group' function
+means <- lsat.dt %>%
+  mutate(group.id = extract_group(sample.id))
+
+# Group the data by 'doy', 'year', and 'group.id', and calculate the mean 'evi' for each group
+grouped_means <- means %>%
+  group_by(doy, year, group.id) %>%
+  summarize(evi = mean(evi))
+
+# Filter the grouped means to include only data from the year 2010 and onwards
+grouped_means <- filter(grouped_means, year >= 2010)
+
+# Fit phenological models (cubic splines) to each time series using the 'updated_curve_fit_mean' function
+lsat.pheno.dt <- updated_curve_fit_mean(grouped_means, si = 'evi', spar = .6)
 ```
 
 ```{r}
