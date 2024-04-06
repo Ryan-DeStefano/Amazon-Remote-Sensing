@@ -1,0 +1,68 @@
+library(rgee)
+
+brazil_polygon <- ee$Geometry$Polygon(
+  list(
+    c(-73.98, -33.77),
+    c(-34.79, -33.77),
+    c(-34.79, 5.27),
+    c(-73.98, 5.27),
+    c(-73.98, -33.77)
+  )
+)
+
+# Convert Brazil polygon to Earth Engine geometry
+study_area <- ee$Feature(brazil_polygon, list())
+
+# Define sample points within Brazil
+sample_points <- ee$FeatureCollection(list(
+  ee$Feature(ee$Geometry$Point(-55.0, -10.0), list("name" = "Point1")),
+  ee$Feature(ee$Geometry$Point(-50.0, -15.0), list("name" = "Point2"))
+))
+
+# Access ALOS satellite data
+alos_collection <- ee$ImageCollection("JAXA/ALOS/PALSAR/YEARLY/SAR")
+
+# Filter ALOS data by study area and time period
+alos_filtered <- alos_collection$filterBounds(study_area)$
+  filterDate("1984-01-01", NULL)  # Start date is 1984-01-01, end date is NULL
+
+# Function to extract measurements for each sample point
+extract_measurements <- function(image) {
+  measurements <- ee$Image$reduceRegions(
+    image = image,
+    collection = sample_points,
+    reducer = ee$Reducer$mean(),
+    scale = 100,  # Adjust scale according to your requirement
+    crs = "EPSG:4326"
+  )
+  return(measurements)
+}
+
+# Map the extraction function over the ALOS data collection
+results <- ee$List$flatten(alos_filtered$map(extract_measurements))
+
+results_list <- as.list(results)
+
+# Initialize empty lists to store extracted data
+point_names <- c()
+means <- c()
+
+# Extract information from each result
+for (i in 1:length(results_list)) {
+  # Extract point name
+  point_name <- results_list[[i]]$get("name")
+  point_names <- c(point_names, point_name)
+  
+  # Extract mean value
+  mean_value <- results_list[[i]]$get("mean")
+  means <- c(means, mean_value)
+}
+
+# Create a data frame from the extracted information
+results_df <- data.frame(Point_Name = point_names, Mean_Value = means)
+
+# View the data frame
+View(results_df)
+
+# Export the results to your R environment
+write.csv(results_df, "path_to_output.csv")
