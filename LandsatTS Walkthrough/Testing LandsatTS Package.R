@@ -10,6 +10,7 @@ library(data.table)
 library(stringr)
 library(rgee)
 library(lwgeom)
+library(leaflet)
 
 # Load LandsatTS package
 library(LandsatTS)
@@ -100,7 +101,7 @@ lsat.pheno.dt <- lsat_fit_phenological_curves(lsat.dt, si = 'ndvi', window.yrs =
 # Gives some summary stats on the phenological curve fits
 lsat.gs.dt <- lsat_summarize_growing_seasons(lsat.pheno.dt, si = 'ndvi', min.frac.of.max = 0.75)
 
-#Creates boxplots for num of Obs vs % dif from max observed NDVI
+#Creates boxplots for num of Obs vs % diff from max observed NDVI
 lsat.gs.eval.dt <- lsat_evaluate_phenological_max(lsat.pheno.dt, si = 'ndvi', min.obs = 10, reps = 5, min.frac.of.max = 0.75, outdir = NA)
 
 # Create data for and plot histogram of relative change in greeness
