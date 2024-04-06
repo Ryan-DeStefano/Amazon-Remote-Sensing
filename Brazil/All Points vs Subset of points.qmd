@@ -1,0 +1,112 @@
+---
+title: "All Points vs Subset of Points"
+format: html
+editor: visual
+---
+
+## All Points (Around 16 Points in Each Polygon)
+
+```{r}
+lsat.dt <- do.call("rbind", lapply(c("ID 800-809 Polygons All Points.csv"), fread))
+
+# Format the data
+lsat.dt <- lsat_format_data(lsat.dt)
+
+# Only keep observations where there was clear sky etc
+lsat.dt <- lsat_clean_data(lsat.dt, geom.max = 15, cloud.max = 80, sza.max = 60, filter.cfmask.snow = T, filter.cfmask.water = T, filter.jrc.water = T)
+```
+
+```{r}
+# Retrieve NDVI values
+lsat.dt <- lsat_calc_spectral_index(lsat.dt, si = 'evi')
+
+# Cross-calibrate NDVI among sensors using an approach based on Random Forest machine learning
+# Note: Need lots of observations for this to work
+lsat.dt <- lsat_calibrate_rf(lsat.dt, 
+                             band.or.si = 'evi', 
+                             doy.rng = 1:365, 
+                             min.obs = 5, 
+                             frac.train = 0.75, 
+                             overwrite.col = T, 
+                             write.output = F)
+```
+
+```{r}
+extract_group <- function(sample_id, group_sizes) {
+  group_number <- as.numeric(sub("S_", "", sample_id))
+  cum_group_sizes <- c(0, cumsum(group_sizes))
+  higher_order_group <- sum(group_number > cum_group_sizes)
+  return(higher_order_group)
+}
+
+lsat.dt$group.id <- NA  # Initialize group.id column with NA values
+
+sample_id <- as.numeric(gsub("S_", "", lsat.dt$sample.id))  # Extract numeric part from sample.id
+
+lsat.dt$group.id[sample_id >= 1 & sample_id <= 16] <- 1
+lsat.dt$group.id[sample_id >= 17 & sample_id <= 33] <- 2
+lsat.dt$group.id[sample_id >= 34 & sample_id <= 48] <- 3
+lsat.dt$group.id[sample_id >= 49 & sample_id <= 61] <- 4
+lsat.dt$group.id[sample_id >= 62 & sample_id <= 77] <- 5
+lsat.dt$group.id[sample_id >= 78 & sample_id <= 90] <- 6
+lsat.dt$group.id[sample_id >= 91 & sample_id <= 107] <- 7
+lsat.dt$group.id[sample_id >= 108 & sample_id <= 123] <- 8
+lsat.dt$group.id[sample_id >= 124 & sample_id <= 142] <- 9
+lsat.dt$group.id[sample_id >= 143] <- 10
+
+grouped_means <- lsat.dt %>%
+  group_by(doy, year, group.id) %>%
+  summarize(evi = mean(evi))
+
+grouped_means <- filter(grouped_means, year >= 2010, group.id != 10)
+
+# Fit phenological models (cubic splines) to each time series (Took out vi.min arg)
+lsat.pheno.dt <- updated_curve_fit_mean(grouped_means, si = 'evi', spar = .6)
+```
+
+## Subset of Points (8 Per Polygon)
+
+```{r}
+lsat.dt <- do.call("rbind", lapply(c("ID 800-809 Polygons 10 Points.csv"), fread))
+
+# Format the data
+lsat.dt <- lsat_format_data(lsat.dt)
+
+# Only keep observations where there was clear sky etc
+lsat.dt <- lsat_clean_data(lsat.dt, geom.max = 15, cloud.max = 80, sza.max = 60, filter.cfmask.snow = T, filter.cfmask.water = T, filter.jrc.water = T)
+```
+
+```{r}
+# Retrieve NDVI values
+lsat.dt <- lsat_calc_spectral_index(lsat.dt, si = 'evi')
+
+# Cross-calibrate NDVI among sensors using an approach based on Random Forest machine learning
+# Note: Need lots of observations for this to work
+lsat.dt <- lsat_calibrate_rf(lsat.dt, 
+                             band.or.si = 'evi', 
+                             doy.rng = 1:365, 
+                             min.obs = 5, 
+                             frac.train = 0.75, 
+                             overwrite.col = T, 
+                             write.output = F)
+```
+
+```{r}
+extract_group <- function(sample_id) {
+  group_number <- as.numeric(sub("S_", "", sample_id))
+  higher_order_group <- ((group_number - 1) %/% 8) + 1
+  return(higher_order_group)
+}
+
+means <- lsat.dt %>%
+  mutate(group.id = extract_group(sample.id))
+
+grouped_means <- means %>%
+  group_by(doy, year, group.id) %>%
+  summarize(evi = mean(evi))
+
+grouped_means <- filter(grouped_means, year >= 2010, group.id != 10)
+
+# Fit phenological models (cubic splines) to each time series (Took out vi.min arg)
+lsat.pheno.dt <- updated_curve_fit_mean(grouped_means, si = 'evi', spar = .6)
+```
