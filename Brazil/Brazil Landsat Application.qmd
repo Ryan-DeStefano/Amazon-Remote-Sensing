@@ -99,7 +99,7 @@ for (i in 1:nrow(top_10_para)) {
   # Store the WKT representation of the sampled point geometries and sample IDs in the test tibble
   test$geometry[start_index:end_index] <- point_wkt
   test$sample_id[start_index:end_index] <- paste0('S_', sample_counter:(sample_counter + n.pts_per_polygon - 1))
-  
+        
   # Increment the sample ID counter
   sample_counter <- sample_counter + n.pts_per_polygon
 }
