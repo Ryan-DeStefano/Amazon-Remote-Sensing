@@ -207,7 +207,7 @@ task_list <- lsat_export_ts(test_sf, start_doy=1, end_doy=365)
 ```
 
 ```{r}
-lsat.dt <- do.call("rbind", lapply(c("Correct_Days_Top_10_Brazil.csv"), fread))
+lsat.dt <- do.call("rbind", lapply(c("Top_10_Brazil_20_points_each_plantation.csv"), fread))
 ```
 
 ```{r}
@@ -242,7 +242,7 @@ lsat.dt <- lsat_calibrate_rf(lsat.dt,
 # Function to exract sample points that came from the same polygon, will be used to help fit the mean evi values of a polygon rather than individual sample points. Will need to be updated, works for when there are 10 points sampled from each polygon
 extract_group <- function(sample_id) {
   group_number <- as.numeric(sub("S_", "", sample_id))
-  higher_order_group <- ((group_number - 1) %/% 10) + 1
+  higher_order_group <- ((group_number - 1) %/% 20) + 1
   return(higher_order_group)
 }
 
