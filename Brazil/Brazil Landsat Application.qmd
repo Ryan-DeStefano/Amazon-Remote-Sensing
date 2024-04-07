@@ -126,7 +126,7 @@ leaflet() %>%
 
 ```{r}
 # Create a vector specifying the number of points to be sampled from each polygon
-n_pts_per_polygon <- c(5, 10, 15, 8, 12)  # Example vector, replace with your desired values
+n_pts_per_polygon <- c(rep(20, times=10))  # Example vector, replace with your desired values
 
 # Initialize the tibble with the appropriate size
 test <- tibble(geometry = vector("list", sum(n_pts_per_polygon)),
@@ -136,7 +136,7 @@ test <- tibble(geometry = vector("list", sum(n_pts_per_polygon)),
 sample_counter <- 1
 
 # Loop through each region to sample points
-for (i in 1:length(n_pts_per_polygon)) {
+for (i in 1:10) {
   # Sample points from the i-th polygon
   pts <- st_sample(x = top_10_para[i, ], size = n_pts_per_polygon[i])
   
@@ -163,7 +163,7 @@ Gets all pixel centers for all regions (will take too long, don't use, 1 million
 ```{r}
 all_pixel_lists <- list()
 
-for (i in 948){
+for (i in 1){
   poly <- top_10_para$geometry[i]
   if (st_geometry_type(poly) == "MULTIPOLYGON"){
     polys <- st_cast(poly, "POLYGON")
