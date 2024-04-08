@@ -5,7 +5,30 @@ editor: visual
 ---
 
 ```{r}
-ALOS(test_sf, start_doy=1, end_doy=365)
+task_list <- ALOS(test_sf)
+```
+
+```{r}
+pixel_coords <- st_as_sf(data.frame(
+  lon = c(-47.93855, -48.53345, -48.75331),
+  lat = c(-1.301847, -2.467612, -2.438079)
+), coords = c("lon", "lat"), crs = 4326)
+
+# Call the ALOS function with the pixel coordinates
+ALOS_result <- ALOS(
+  pixel_coords_sf = pixel_coords,
+  sample_id_from = "sample_id",  # Specify the column name for sample IDs
+  chunks_from = NULL,  # Optional: specify the column name for chunk IDs
+  this_chunk_only = NULL,  # Optional: specify a specific chunk to process
+  max_chunk_size = 250,  # Maximum number of pixels per chunk
+  drive_export_dir = "alosTS_export",  # Specify the directory in Google Drive for export
+  file_prefix = "alosTS_export",  # Prefix for exported file names
+  start_date = "1984-01-01",  # Start date of the time-series data
+  end_date = "today",  # End date of the time-series data (use "today" for current date)
+  buffer_dist = 0,  # Optional: buffer distance around each pixel
+  scale = 100,  # Scale parameter for reduceRegion function
+  mask_value = 0  # Mask value for filtering pixels
+)
 ```
 
 ```{r}
@@ -27,7 +50,7 @@ extractHH <- function(image) {
     scale = 25 # The scale of the data, in meters
   )
   # Return the HH value as a feature with a timestamp property
-  return ee$Feature(NULL, list('HH_value' = hhValue$get('HH'), 'timestamp' = image$get('system:time_start')))
+  return(ee$Feature(NULL, list('HH_value' = hhValue$get('HH'), 'timestamp' = image$get('system:time_start'))))
 }
 
 # Initialize an empty feature collection to store the results
