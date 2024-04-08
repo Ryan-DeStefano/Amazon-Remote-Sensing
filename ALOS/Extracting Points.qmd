@@ -4,23 +4,53 @@ format: html
 editor: visual
 ---
 
-## Quarto
-
-Quarto enables you to weave together content and executable code into a finished document. To learn more about Quarto see <https://quarto.org>.
-
-## Running Code
-
-When you click the **Render** button a document will be generated that includes both content and the output of embedded code. You can embed code like this:
-
 ```{r}
-1 + 1
+ALOS(test_sf, start_doy=1, end_doy=365)
 ```
 
-You can add options to executable code like this
-
 ```{r}
-#| echo: false
-2 * 2
-```
+dataset <- ee$ImageCollection('JAXA/ALOS/PALSAR/YEARLY/SAR_EPOCH') %>%
+  ee$ImageCollection$filter(ee$Filter$date('2017-01-01', '2017-12-31')) # Change end date to cover entire year
 
-The `echo: false` option disables the printing of code (only output is displayed).
+# Select the HH band
+sarHh <- dataset$select('HH')
+
+# Define the region of interest (ROI) as a point
+point <- ee$Geometry$Point(-138.90125, 69.58413)
+
+# Function to extract HH value at the specified point for each image
+extractHH <- function(image) {
+  # Extract HH value at the specified point
+  hhValue <- image$reduceRegion(
+    reducer = ee$Reducer$first(),
+    geometry = point,
+    scale = 25 # The scale of the data, in meters
+  )
+  # Return the HH value as a feature with a timestamp property
+  return ee$Feature(NULL, list('HH_value' = hhValue$get('HH'), 'timestamp' = image$get('system:time_start')))
+}
+
+# Initialize an empty feature collection to store the results
+hhValues <- ee$FeatureCollection$empty()
+
+# Iterate over each day in the time range and extract HH values
+start <- ee$Date('2017-01-01')
+end <- ee$Date('2017-12-31')
+days <- end$difference(start, 'day')$getInfo()
+for (i in 0:days) {
+  currentDate <- start$advance(i, 'day')
+  image <- sarHh$filterDate(currentDate, currentDate$advance(1, 'day'))$first()
+  if (!is.null(image)) {
+    hhFeature <- extractHH(image)
+    hhValues <- hhValues$merge(hhFeature)
+  }
+}
+
+# Export the HH values to a CSV file
+ee$Export$table.toDrive(
+  collection = hhValues,
+  description = 'HH_Values',
+  fileFormat = 'CSV',
+  selectors = c('HH_value', 'timestamp') # Specify the columns to include in the CSV
+)
+```

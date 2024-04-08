@@ -126,7 +126,7 @@ leaflet() %>%
 
 ```{r}
 # Create a vector specifying the number of points to be sampled from each polygon
-n_pts_per_polygon <- c(rep(50, times=10))  # Example vector, replace with your desired values
+n_pts_per_polygon <- c(rep(1, times=10))  # Example vector, replace with your desired values
 
 # Initialize the tibble with the appropriate size
 test <- tibble(geometry = vector("list", sum(n_pts_per_polygon)),
