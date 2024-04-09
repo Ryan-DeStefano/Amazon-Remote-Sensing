@@ -26,13 +26,13 @@ library(LandsatTS)
 
 ```{r}
 # Path to the GeoJSON file
-geojson_file <- "C:/Users/Ryman/OneDrive/Documents/Thesis/PeruAOI No Tiles (Master)/PeruAOI (Master)/04 Dataset_Ucayali_Palm_V2.geojson"
+geojson_file <- "04 Dataset_Ucayali_Palm_V2.geojson"
 
 # Read the GeoJSON file
 main <- st_read(geojson_file)
 
 # Path to output shapefile (without file extension)
-output_shapefile <- "C:/Users/Ryman/OneDrive/Documents/Thesis/PeruAOI No Tiles (Master)/PeruAOI (Master)/04 Dataset_Ucayali_Palm_V2.shp"
+output_shapefile <- "04 Dataset_Ucayali_Palm_V2.shp"
 
 # Write the spatial data to a shapefile
 st_write(geojson_data, dsn = output_shapefile)
@@ -42,7 +42,7 @@ st_write(geojson_data, dsn = output_shapefile)
 set.seed(27)
 
 main <- st_read(
-  "C:/Users/Ryman/OneDrive/Documents/Thesis/PeruAOI No Tiles (Master)/PeruAOI (Master)/04 Dataset_Ucayali_Palm_V2.shp")
+  "04 Dataset_Ucayali_Palm_V2.shp")
 
 main <- st_make_valid(main)
 
@@ -70,8 +70,9 @@ main$AREA <- areas
 
 ```{r}
 top_10_peru <- main %>% 
-  arrange(desc(AREA)) %>%
-  slice_head(n = 10)
+  arrange(desc(AREA)) 
+
+top_10_peru$estimated_points <- top_10_peru$AREA / 0.00000006
 
 # Define the number of points to sample from each polygon
 n.pts_per_polygon <- 25  # Change this value as needed
