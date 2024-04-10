@@ -21,7 +21,7 @@ num_sample_points <- function(dataset){
   return(num_points_vector)
 }
 
-# Brazil
+#Brazil
 estmiated_hours_to_export <- sum(num_sample_points(top_10_para))/2/60
 estmiated_hours_to_export
 

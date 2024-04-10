@@ -77,7 +77,7 @@ bottom_10_para <- paracrop %>%
   slice_head(n = 10)
 
 # Define the number of points to sample from each polygon
-n.pts_per_polygon <- 5  # Change this value as needed
+n.pts_per_polygon <- 1  # Change this value as needed
 
 # Create an empty tibble to store the sampled points
 test <- tibble(geometry = vector("list", nrow(top_10_para) * n.pts_per_polygon),
