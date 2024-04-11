@@ -126,7 +126,7 @@ leaflet() %>%
 
 ```{r}
 # Create a vector specifying the number of points to be sampled from each polygon
-n_pts_per_polygon <- c(rep(1, times=10))  # Example vector, replace with your desired values
+n_pts_per_polygon <- num_sample_points(top_10_para)  # Example vector, replace with your desired values
 
 # Initialize the tibble with the appropriate size
 test <- tibble(geometry = vector("list", sum(n_pts_per_polygon)),
@@ -136,7 +136,7 @@ test <- tibble(geometry = vector("list", sum(n_pts_per_polygon)),
 sample_counter <- 1
 
 # Loop through each region to sample points
-for (i in 1:10) {
+for (i in nrow(top_10_para)) {
   # Sample points from the i-th polygon
   pts <- st_sample(x = top_10_para[i, ], size = n_pts_per_polygon[i])
   
@@ -207,7 +207,7 @@ task_list <- lsat_export_ts(test_sf, start_doy=1, end_doy=365)
 ```
 
 ```{r}
-lsat.dt <- do.call("rbind", lapply(c("Top 10 50 points Chunk 1.csv", "Top 10 50 points Chunk 2.csv"), fread))
+lsat.dt <- do.call("rbind", lapply(c("C:/Users/Ryman/Downloads/lsatTS_export_chunk_1 (1).csv"), fread))
 ```
 
 ```{r}
@@ -242,7 +242,7 @@ lsat.dt <- lsat_calibrate_rf(lsat.dt,
 # Function to exract sample points that came from the same polygon, will be used to help fit the mean evi values of a polygon rather than individual sample points. Will need to be updated, works for when there are 10 points sampled from each polygon
 extract_group <- function(sample_id) {
   group_number <- as.numeric(sub("S_", "", sample_id))
-  higher_order_group <- ((group_number - 1) %/% 50) + 1
+  higher_order_group <- ((group_number - 1) %/% 20) + 1
   return(higher_order_group)
 }
 
@@ -253,7 +253,7 @@ grouped_means <- means %>%
   group_by(doy, year, group.id) %>%
   summarize(evi = mean(evi))
 
-grouped_means <- filter(grouped_means, year >= 2010)
+# grouped_means <- filter(grouped_means, year >= 2010)
 
 # Fit phenological models (cubic splines) to each time series (Took out vi.min arg)
 lsat.pheno.dt <- updated_curve_fit_mean(grouped_means, si = 'evi', spar = .6)
@@ -263,7 +263,7 @@ lsat.pheno.dt <- updated_curve_fit_mean(grouped_means, si = 'evi', spar = .6)
 lsat.dt <- filter(lsat.dt, year >= 2010)
 
 # Fit phenological models (cubic splines) to each time series (Took out vi.min arg)
-lsat.pheno.dt <- updated_curve_fit(lsat.dt, si = 'evi', spar = .6)
+lsat.pheno.dt <- fit_phenological_curve_no_points(lsat.dt, si = 'evi', spar = .6)
 
 # Gives some summary stats on the phenological curve fits
 lsat.gs.dt <- lsat_summarize_growing_seasons(lsat.pheno.dt, si = 'evi', min.frac.of.max = 0.75)
