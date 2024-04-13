@@ -87,11 +87,13 @@ occurrences <- round(proportions * 1288)
 # Create the new vector
 new_vector <- rep(as.numeric(names(occurrences)), occurrences)
 
+new_vector <- c(new_vector, 1, 1, 1)
+
 # Check the length of the new vector
 length(new_vector)  # Output: 1288
 
 # Create a vector specifying the number of points to be sampled from each polygon
-n_pts_per_polygon <- similar_vector  # Example vector, replace with your desired values
+n_pts_per_polygon <- new_vector  # Example vector, replace with your desired values
 
 # Initialize the tibble with the appropriate size
 test <- tibble(geometry = vector("list", sum(n_pts_per_polygon)),
