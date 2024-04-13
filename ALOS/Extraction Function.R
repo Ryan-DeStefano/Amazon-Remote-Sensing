@@ -43,10 +43,41 @@ ALOS <- function (pixel_coords_sf, sample_id_from = "sample_id", chunks_from = N
   bands <- list("HH", "HV")
   BAND_LIST <- rgee::ee$List(bands)
   
-  ALOS_COLL <- rgee::ee$ImageCollection("JAXA/ALOS/PALSAR/YEARLY/SAR_EPOCH")
+  ALOS_COLL <- rgee::ee$ImageCollection("JAXA/ALOS/PALSAR-2/Level2_2/ScanSAR")
   ALL_BANDS <- BAND_LIST
   
   ADDON <- rgee::ee$Image(0)$float()$mask(mask_value)
+  
+  # Function to apply on each feature within the mapping operation
+  mapped_function <- function(feature) {
+    tryCatch({
+      image <- ALOS_COLL$filterBounds(feature$geometry())$
+        filterDate(start_date, end_date)$
+        map(function(image) {
+          image = rgee::ee$Algorithms$If(image$bandNames()$size()$eq(rgee::ee$Number(2)), 
+                                         image, image$addBands(ADDON))
+          return(image)
+        })$
+        select("HH", "HV")
+      
+      properties <- list("ASCENDING_DESCENDING_FLAG", "CLOUD_COVERAGE_ASSESSMENT", "FREQUENCY_BAND", 
+                         "PRODUCT_TYPE", "relOrbitNumber_start")
+      result <- rgee::ee$Feature(feature$geometry(), 
+                                 image$reduceRegion(reducer = rgee::ee$Reducer$mean(), 
+                                                    geometry = feature$geometry(), 
+                                                    scale = scale))
+      
+      # Copy properties and set sample_id_from and chunks_from
+      result <- result$copyProperties(image, properties)
+      result <- result$set(sample_id_from, feature$get(sample_id_from))
+      result <- result$set(chunks_from, feature$get(chunks_from))
+      
+      return(result)
+    }, error = function(e) {
+      message("Error processing chunk:", conditionMessage(e))
+      NULL
+    })
+  }
   
   if (buffer_dist > 0) {
     # Apply buffer to pixel_coords_sf
@@ -75,59 +106,13 @@ ALOS <- function (pixel_coords_sf, sample_id_from = "sample_id", chunks_from = N
   cat(paste0("Exporting time-series for ", nrow(pixel_coords_sf), 
              " pixels", " in ", length(unique(pixel_coords_sf[[chunks_from]])), " chunks.\n"))
   
-  # Define mapped_function
-  mapped_function <- function(feature) {
-    tryCatch({
-      # Generate a sequence of dates between start_date and end_date
-      dates <- seq(as.Date(start_date), as.Date(end_date), by = "day")
-      
-      # Initialize a list to store images
-      image_list <- list()
-      
-      # Iterate over each date
-      for (date in dates) {
-        # Convert date to Earth Engine Date object
-        ee_date <- ee$Date(date)
-        
-        # Retrieve the image for the current date within the bounds of the feature
-        image <- ALOS_COLL$filterBounds(feature$geometry())$
-          filterDate(ee_date)$
-          first() # Select the first image on that date
-        
-        # Check if the retrieved image is not NULL and is an image object
-        if (!is.null(image) && inherits(image, "ee$Image")) {
-          # Append the image to the list
-          image_list[[length(image_list) + 1]] <- image
-        }
-      }
-      
-      # If no images found, return NULL
-      if (length(image_list) == 0)
-        return(NULL)
-      
-      # Merge all images into one image collection
-      image_collection <- ee$ImageCollection$fromImages(image_list)
-      
-      # Reduce the ImageCollection to a single Image
-      merged_image <- image_collection$mosaic()
-      
-      # Return the resulting image
-      return(merged_image)
-    }, error = function(e) {
-      message("Error processing chunk:", conditionMessage(e))
-      NULL
-    })
-  }
-  
+  # Apply the mapped function to each chunk
   task_list <- pixel_coords_sf %>%
     split(., pixel_coords_sf[[chunks_from]]) %>%
     purrr::map(function(chunk) {
       cat(paste0("Submitting task to EE for chunk_id: ", chunk[[chunks_from]][1], ".\n"))
       ee_chunk <- rgee::sf_as_ee(chunk[, c("geometry", sample_id_from, chunks_from)])
       ee_chunk_export <- ee_chunk$map(mapped_function) # Apply mapped_function
-      
-      # Filter out NULL elements
-      ee_chunk_export <- ee_chunk_export[!sapply(ee_chunk_export, is.null)]
       
       # Convert to table and export to Drive
       chunk_task <- tryCatch({
@@ -145,5 +130,7 @@ ALOS <- function (pixel_coords_sf, sample_id_from = "sample_id", chunks_from = N
       return(chunk_task)
     })
   
+  cat(crayon::green("Done!\n"))
+  cat("You can monitor the progress of the task(s) using rgee's ee_monitoring() or the GEE WebAPI.\n")
   return(task_list)
 }

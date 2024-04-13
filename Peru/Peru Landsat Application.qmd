@@ -42,7 +42,7 @@ st_write(geojson_data, dsn = output_shapefile)
 set.seed(27)
 
 main <- st_read(
-  "04 Dataset_Ucayali_Palm_V2.shp")
+  "04 Dataset_Ucayali_Palm_V2.geojson")
 
 main <- st_make_valid(main)
 
@@ -72,14 +72,30 @@ main$AREA <- areas
 top_10_peru <- main %>% 
   arrange(desc(AREA)) 
 
-top_10_peru$estimated_points <- top_10_peru$AREA / 0.00000006
+top_10_peru$estimated_points <- top_10_peru$AREA / 2
 
-# Define the number of points to sample from each polygon
-n.pts_per_polygon <- 25  # Change this value as needed
+given_vector <- c(rep(20, 325), rep(19, 4), rep(18, 9), rep(17, 9), rep(16, 6), rep(15, 9), rep(14, 9), rep(13, 9), rep(12, 12), 
+                  rep(11, 9), rep(10, 18), rep(9, 27), rep(8, 33), rep(7, 45), rep(6, 78), rep(5, 103), rep(4, 145), 
+                  rep(3, 243), rep(2, 406), rep(1, 629))
 
-# Create an empty tibble to store the sampled points
-test <- tibble(geometry = vector("list", nrow(top_10_peru) * n.pts_per_polygon),
-               sample_id = character(nrow(top_10_peru) * n.pts_per_polygon))
+# Calculate proportions
+proportions <- table(given_vector) / length(given_vector)
+
+# Calculate occurrences for each number in the new vector
+occurrences <- round(proportions * 1288)
+
+# Create the new vector
+new_vector <- rep(as.numeric(names(occurrences)), occurrences)
+
+# Check the length of the new vector
+length(new_vector)  # Output: 1288
+
+# Create a vector specifying the number of points to be sampled from each polygon
+n_pts_per_polygon <- similar_vector  # Example vector, replace with your desired values
+
+# Initialize the tibble with the appropriate size
+test <- tibble(geometry = vector("list", sum(n_pts_per_polygon)),
+               sample_id = character(sum(n_pts_per_polygon)))
 
 # Initialize the sample ID counter
 sample_counter <- 1
@@ -87,24 +103,23 @@ sample_counter <- 1
 # Loop through each region to sample points
 for (i in 1:nrow(top_10_peru)) {
   # Sample points from the i-th polygon
-  pts <- st_sample(x = top_10_peru[i, ], size = n.pts_per_polygon)
+  pts <- st_sample(x = top_10_peru[i, ], size = n_pts_per_polygon[i])
   
   # Convert the sampled points to their WKT representation
   point_wkt <- st_as_text(pts)
   
   # Determine the indices to store the sampled points
-  start_index <- (i - 1) * n.pts_per_polygon + 1
-  end_index <- i * n.pts_per_polygon
+  start_index <- sample_counter
+  end_index <- sample_counter + n_pts_per_polygon[i] - 1
   
   # Store the WKT representation of the sampled point geometries and sample IDs in the test tibble
   test$geometry[start_index:end_index] <- point_wkt
-  test$sample_id[start_index:end_index] <- paste0('S_', sample_counter:(sample_counter + n.pts_per_polygon - 1))
-  
+  test$sample_id[start_index:end_index] <- paste0('S_', start_index:end_index)
+        
   # Increment the sample ID counter
-  sample_counter <- sample_counter + n.pts_per_polygon
+  sample_counter <- end_index + 1
 }
 
-# Convert the test tibble to an sf object
 test_sf <- st_as_sf(test, wkt = "geometry", crs=4326)
 
 leaflet() %>%

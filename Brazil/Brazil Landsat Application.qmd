@@ -42,20 +42,13 @@ st_crs(paracrop)
 paracrop <- st_transform(paracrop, crs = 4326)
 
 # Sample points
-n.pts <- 10
+n.pts <- 1
 test.pts.sf <- st_sample(x = paracrop, size = n.pts) %>% st_sf()
 test.pts.sf$sample_id <- paste0('S_', 1:n.pts)
 
 # Creating the Leaflet map
 leaflet() %>%
   addProviderTiles('Esri.WorldImagery') %>%
-  addCircleMarkers(data = test.pts.sf, 
-                   color = 'white',
-                   opacity = 0.9,
-                   fillColor = 'fuchsia',
-                   fillOpacity = 0.75,
-                   weight = 1,
-                   radius = 5) %>%
   addPolygons(data = paracrop,
               color = 'white',
               weight = 3) %>%
@@ -126,7 +119,7 @@ leaflet() %>%
 
 ```{r}
 # Create a vector specifying the number of points to be sampled from each polygon
-n_pts_per_polygon <- num_sample_points(top_10_para)  # Example vector, replace with your desired values
+n_pts_per_polygon <- num_sample_points(top_10_para) # Example vector, replace with your desired values
 
 # Initialize the tibble with the appropriate size
 test <- tibble(geometry = vector("list", sum(n_pts_per_polygon)),
@@ -136,7 +129,7 @@ test <- tibble(geometry = vector("list", sum(n_pts_per_polygon)),
 sample_counter <- 1
 
 # Loop through each region to sample points
-for (i in nrow(top_10_para)) {
+for (i in 1:10) {
   # Sample points from the i-th polygon
   pts <- st_sample(x = top_10_para[i, ], size = n_pts_per_polygon[i])
   
@@ -207,7 +200,11 @@ task_list <- lsat_export_ts(test_sf, start_doy=1, end_doy=365)
 ```
 
 ```{r}
-lsat.dt <- do.call("rbind", lapply(c("C:/Users/Ryman/Downloads/lsatTS_export_chunk_1 (1).csv"), fread))
+# Create a vector of file names
+file_names <- paste0("lsatTS_export_chunk_", 1:37, ".csv")
+
+# Read each file and row-bind them together
+lsat.dt <- do.call("rbind", lapply(file_names, fread))
 ```
 
 ```{r}
@@ -246,8 +243,30 @@ extract_group <- function(sample_id) {
   return(higher_order_group)
 }
 
+for (i in 1:nrow(lsat.dt)) {
+  range <- c(1, n_pts_per_polygon[i])
+  sample_ids <- range[1]:range[2]
+  
+}
+
+extract_group <- function(sample_id, group_lengths) {
+  group_numbers <- as.numeric(sub("S_", "", sample_id))
+  cumulative_lengths <- c(0, cumsum(group_lengths))
+  higher_order_group <- rep(NA, length(sample_id))
+  for (i in 1:length(cumulative_lengths)) {
+    if (i == 1) {
+      higher_order_group[group_numbers <= cumulative_lengths[i]] <- i
+    } else {
+      higher_order_group[group_numbers > cumulative_lengths[i - 1] & group_numbers <= cumulative_lengths[i]] <- i
+    }
+  }
+  return(higher_order_group)
+}
+
 means <- lsat.dt %>%
-  mutate(group.id = extract_group(sample.id))
+  mutate(group.id = extract_group(sample.id, n_pts_per_polygon))
+
+means$group.id <- means$group.id - 1
 
 grouped_means <- means %>%
   group_by(doy, year, group.id) %>%
@@ -260,7 +279,7 @@ lsat.pheno.dt <- updated_curve_fit_mean(grouped_means, si = 'evi', spar = .6)
 ```
 
 ```{r}
-lsat.dt <- filter(lsat.dt, year >= 2010)
+# lsat.dt <- filter(lsat.dt, year >= 2010)
 
 # Fit phenological models (cubic splines) to each time series (Took out vi.min arg)
 lsat.pheno.dt <- fit_phenological_curve_no_points(lsat.dt, si = 'evi', spar = .6)
@@ -276,7 +295,7 @@ lsat.gs.eval.dt <- lsat_evaluate_phenological_max(lsat.pheno.dt, si = 'evi', min
 
 ```{r}
 # Create data for and plot histogram of relative change in greeness
-lsat.trnds.dt <- lsat_calc_trend(lsat.gs.dt, si = 'evi.max', 2010:2020, sig = 0.1)
+lsat.trnds.dt <- lsat_calc_trend(lsat.gs.dt, si = 'evi.max', 1984:2024, sig = 0.1)
 lsat_plot_trend_hist(lsat.trnds.dt, xlim=c(-21,21))
 ```
 
@@ -310,4 +329,20 @@ leaflet() %>%
             labels=colors.dt$trend.cat,
             title='NDVImax trend',
             opacity=1)
+```
+
+Find the minimum evi value grouped by plantation
+
+```{r}
+min_evi_plantation <- means %>%
+    group_by(group.id) %>%
+    filter(evi == min(evi)) %>%
+    select(group.id, min_evi = evi, year)
+```
+
+```{r}
+min_evi_sample <- means %>%
+    group_by(sample.id) %>%
+    filter(evi == min(evi)) %>%
+    select(sample.id, min_evi = evi, year)
 ```
