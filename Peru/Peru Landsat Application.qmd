@@ -74,23 +74,28 @@ top_10_peru <- main %>%
 
 top_10_peru$estimated_points <- top_10_peru$AREA / 2
 
-given_vector <- c(rep(20, 325), rep(19, 4), rep(18, 9), rep(17, 9), rep(16, 6), rep(15, 9), rep(14, 9), rep(13, 9), rep(12, 12), 
-                  rep(11, 9), rep(10, 18), rep(9, 27), rep(8, 33), rep(7, 45), rep(6, 78), rep(5, 103), rep(4, 145), 
-                  rep(3, 243), rep(2, 406), rep(1, 629))
+# Provided vector
+provided_vector <- c(rep(20, 325), rep(19, 4), rep(18, 9), rep(17, 9), rep(16, 9), 
+                     rep(15, 6), rep(14, 9), rep(13, 8), rep(12, 9), rep(11, 9), 
+                     rep(10, 9), rep(9, 18), rep(8, 18), rep(7, 27), rep(6, 36), 
+                     rep(5, 45), rep(4, 63), rep(3, 81), rep(2, 108), rep(1, 167))
+
+# Desired length of new vector
+desired_length <- 1281
 
 # Calculate proportions
-proportions <- table(given_vector) / length(given_vector)
+proportions <- table(provided_vector) / length(provided_vector)
 
-# Calculate occurrences for each number in the new vector
-occurrences <- round(proportions * 1288)
+# Calculate number of occurrences for each unique number
+occurrences <- round(proportions * desired_length)
 
 # Create the new vector
-new_vector <- rep(as.numeric(names(occurrences)), occurrences)
+new_vector <- rep(as.numeric(names(occurrences)), times = occurrences)
 
-new_vector <- c(new_vector, 1, 1, 1)
+# Trim the new vector to the desired length
+new_vector <- new_vector[1:desired_length]
 
-# Check the length of the new vector
-length(new_vector)  # Output: 1288
+new_vector <- rev(new_vector)
 
 # Create a vector specifying the number of points to be sampled from each polygon
 n_pts_per_polygon <- new_vector  # Example vector, replace with your desired values
@@ -124,6 +129,8 @@ for (i in 1:nrow(top_10_peru)) {
 
 test_sf <- st_as_sf(test, wkt = "geometry", crs=4326)
 
+rerun <- test_sf[11251:11500, ]
+
 leaflet() %>%
   addProviderTiles('Esri.WorldImagery') %>%
   addCircleMarkers(data = test_sf, 
@@ -140,7 +147,7 @@ leaflet() %>%
 ```
 
 ```{r}
-task_list <- lsat_export_ts(test_sf)
+task_list <- lsat_export_ts(rerun, start_doy=1, end_doy=365)
 ```
 
 ```{r}
