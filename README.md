@@ -1,5 +1,5 @@
 # Amazon-Remote-Sensing
-Project focused on tracking greenness trends of certain vegetation in specified areas within the Amazon Rainforest.
+Project focused on tracking greenness trends of of plantations within the amazon rainforest aiming to find signals of deforestation.
 
 **LandsatTS Walkthrough Folder:**
 
@@ -7,8 +7,16 @@ Contains code walking through the usage of the R package, "LandsatTS". Follows d
 
 **Brazil Folder:**
 
-Conatians code to trace specific areas of interest of the Amazon Rainforest in Brazil.
+Main file for this folder is "Brazil Landasat Application.qmd". Contains code to:
+- Extract evi measurements from landsat satellites for specified points within specified plantations of interest
+- Calibrate the evi measurmenets from multiple Landsat satellites
+- Fit splines to the time series of evi measurmeents dating back to 1984.
+- Plots that summarize the overall trends of evi in these plantations
 
-**Brazil Folder:**
+**Peru Folder:**
 
-Conatians code to trace specific areas of interest of the Amazon Rainforest in Peru.
+Main file for this folder is "Peru Landasat Application.qmd". Contains code to:
+- Extract evi measurements from landsat satellites for specified points within specified plantations of interest
+- Calibrate the evi measurmenets from multiple Landsat satellites
+- Fit splines to the time series of evi measurmeents dating back to 1984.
+- Plots that summarize the overall trends of evi in these plantations
