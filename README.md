@@ -20,3 +20,13 @@ Main file for this folder is "Peru Landasat Application.qmd". Contains code to:
 - Calibrate the evi measurmenets from multiple Landsat satellites
 - Fit splines to the time series of evi measurmeents dating back to 1984.
 - Plots that summarize the overall trends of evi in these plantations
+
+**Helper Functions Folder:**
+
+Contains files for specifying the number of points to sample from each of the plantations and updated version of the lsat_fit_phenological_curves LandsatTS package function.
+
+**ALOS Folder:**
+
+Contains files for extracting measurmenets from the ALOS satellite rather than the Landsat. 
+Note: Not completely working currently.
+
