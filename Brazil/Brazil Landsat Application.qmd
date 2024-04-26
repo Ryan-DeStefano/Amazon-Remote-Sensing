@@ -331,18 +331,75 @@ leaflet() %>%
             opacity=1)
 ```
 
-Find the minimum evi value grouped by plantation
-
+This creates a dataframe that contains each of the plantations and the year that the minimum evi value was observed
 ```{r}
-min_evi_plantation <- means %>%
+min_evi_plantation <- grouped_means %>%
     group_by(group.id) %>%
     filter(evi == min(evi)) %>%
     select(group.id, min_evi = evi, year)
+
+min_evi_plantation <- min_evi_plantation %>%
+    group_by(group.id) %>%
+    filter(year == min(year)) %>%
+    select(group.id, min_evi, year)
 ```
 
+This creates a dataframe that contains each of the sample points and the year that he minimum evi value was observed.
 ```{r}
 min_evi_sample <- means %>%
     group_by(sample.id) %>%
     filter(evi == min(evi)) %>%
     select(sample.id, min_evi = evi, year)
 ```
+
+The following code tracks and plots the minimum evi year for each plantation based on the fitted curves and plots a choropleth map based on the year values
+```{r}
+test <- lsat.pheno.dt %>%
+    group_by(group.id) %>%
+    filter(spl.fit == min(spl.fit)) %>%
+    select(group.id, min_evi = spl.fit, year)
+
+test <- test %>% 
+  group_by(group.id) %>% 
+  filter(year == min(year)) %>% 
+  select(group.id, min_evi, year) %>% 
+  distinct(group.id, .keep_all = TRUE)
+```
+
+```{r}
+top_10_brazil$group.id <- 1:nrow(top_10_brazil)
+
+joined <- test %>% 
+  left_join(top_10_brazil, by = "group.id")
+
+joined <- as.data.frame(joined)
+
+# Normalize the year values between 0 and 1
+joined <- joined %>% 
+  mutate(norm_year = (year - min(year)) / (max(year) - min(year)))
+
+# Convert your dataframe to a spatial object
+sf_joined <- st_as_sf(joined)
+
+# Define custom color palette with vibrant shades of red and green
+color_palette <- colorNumeric(
+  palette = c("#8B0000", "#FF6347", "#FFFFE0", "#ADFF2F", "#006400"),
+  domain = 1984:2024
+)
+
+# Create leaflet map with legend
+map <- leaflet(sf_joined) %>%
+  addProviderTiles("CartoDB.Positron") %>%
+  setView(lng = -75, lat = -8.6, zoom = 8.2) %>%
+  addPolygons(data = sf_joined, fillColor = ~color_palette(year), 
+              color = "grey", weight = 1, opacity = 1, fillOpacity = 0.7) %>%
+  addLegend(position = "bottomright", 
+            pal = color_palette, 
+            values = ~year,
+            title = "Year",
+            opacity = 0.7,
+            labFormat = labelFormat(suffix = "", digits = 0, big.mark = ""))
+            
+map
+```
+
