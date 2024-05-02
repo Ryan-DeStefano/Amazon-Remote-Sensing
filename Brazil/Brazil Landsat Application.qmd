@@ -53,6 +53,18 @@ leaflet() %>%
               color = 'white',
               weight = 3) %>%
   addScaleBar(options = scaleBarOptions(imperial = FALSE))
+
+lat <- -2.769433
+lon <- -51.627340
+
+lat <- -8.179632
+lon <- -74.95231
+
+leaflet() %>%
+  addProviderTiles('Esri.WorldImagery') %>%
+  addScaleBar(options = scaleBarOptions(imperial = FALSE)) %>%
+  addMarkers(lat = lat, lng = lon, popup = "Peru Plantations") %>% 
+  addMarkers(lat = -8.179, lng = -74.952)
 ```
 
 Sorting top 10 rows based on area and sampling a certain number of points from each area (specific to plantation). USED THIS FOR Top_10_Brazil_1 and 2
@@ -332,6 +344,7 @@ leaflet() %>%
 ```
 
 This creates a dataframe that contains each of the plantations and the year that the minimum evi value was observed
+
 ```{r}
 min_evi_plantation <- grouped_means %>%
     group_by(group.id) %>%
@@ -345,6 +358,7 @@ min_evi_plantation <- min_evi_plantation %>%
 ```
 
 This creates a dataframe that contains each of the sample points and the year that he minimum evi value was observed.
+
 ```{r}
 min_evi_sample <- means %>%
     group_by(sample.id) %>%
@@ -353,6 +367,7 @@ min_evi_sample <- means %>%
 ```
 
 The following code tracks and plots the minimum evi year for each plantation based on the fitted curves and plots a choropleth map based on the year values
+
 ```{r}
 test <- lsat.pheno.dt %>%
     group_by(group.id) %>%
@@ -402,4 +417,3 @@ map <- leaflet(sf_joined) %>%
             
 map
 ```
-

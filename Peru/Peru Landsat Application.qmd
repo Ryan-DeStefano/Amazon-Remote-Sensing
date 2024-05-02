@@ -133,17 +133,23 @@ rerun <- test_sf[11251:11500, ]
 
 leaflet() %>%
   addProviderTiles('Esri.WorldImagery') %>%
-  addCircleMarkers(data = test_sf, 
-                   color = 'white',
-                   opacity = 0.9,
-                   fillColor = 'fuchsia',
-                   fillOpacity = 0.75,
-                   weight = 1,
-                   radius = 5) %>%
+  
   addPolygons(data = top_10_peru,
               color = 'white',
               weight = 3) %>%
   addScaleBar(options = scaleBarOptions(imperial = FALSE))
+```
+
+```{r}
+# Define your specific latitude and longitude
+lat <- -8.179632
+lon <- -74.95231
+
+leaflet() %>%
+  addProviderTiles('Esri.WorldImagery') %>%
+  addScaleBar(options = scaleBarOptions(imperial = FALSE)) %>%
+  addMarkers(lat = lat, lng = lon, popup = "Peru Plantations")
+
 ```
 
 ```{r}
@@ -153,6 +159,8 @@ task_list <- lsat_export_ts(rerun, start_doy=1, end_doy=365)
 ```{r}
 # Create a vector of file names
 file_names <- paste0("lsatTS_export_chunk_", 1:50, ".csv")
+
+file_names <- paste0("C:/Users/Ryman/OneDrive/Documents/Thesis/Exported Pixels/Test/lsatTS_export_chunk_1.csv")
 
 # Read each file and row-bind them together
 lsat.dt <- do.call("rbind", lapply(file_names, fread))
@@ -223,17 +231,17 @@ grouped_means <- means %>%
   group_by(doy, year, group.id) %>%
   summarize(evi = mean(evi))
 
-bruh <- filter(grouped_means, group.id == 2)
+bruh <- filter(grouped_means, group.id == 1036)
 
 # Fit phenological models (cubic splines) to each time series (Took out vi.min arg)
-lsat.pheno.dt <- updated_curve_fit_mean(grouped_means, si = 'evi', spar = .6)
+lsat.pheno.dt <- updated_curve_fit_mean(grouped_means,  si = 'evi', spar = .6)
 ```
 
 ```{r}
 bruh <- filter(lsat.dt, sample.id == "S_10")
 
 # Fit phenological models (cubic splines) to each time series (Took out vi.min arg)
-lsat.pheno.dt <- fit_phenological_curve_no_points(bruh, si = 'evi', spar = .6)
+lsat.pheno.dt <- fit_phenological_curve_no_points(lsat.dt, si = 'evi', spar = .6)
 
 lsat.pheno.dt <- lsat_fit_phenological_curves(bruh, si = 'evi', spar = .6)
 
@@ -283,6 +291,7 @@ leaflet() %>%
 ```
 
 This creates a dataframe that contains each of the plantations and the year that the minimum evi value was observed
+
 ```{r}
 min_evi_plantation <- grouped_means %>%
     group_by(group.id) %>%
@@ -296,6 +305,7 @@ min_evi_plantation <- min_evi_plantation %>%
 ```
 
 This creates a dataframe that contains each of the sample points and the year that he minimum evi value was observed.
+
 ```{r}
 min_evi_sample <- means %>%
     group_by(sample.id) %>%
@@ -304,6 +314,7 @@ min_evi_sample <- means %>%
 ```
 
 The following code tracks and plots the minimum evi year for each plantation based on the fitted curves and plots a choropleth map based on the year values
+
 ```{r}
 test <- lsat.pheno.dt %>%
     group_by(group.id) %>%
@@ -354,3 +365,63 @@ map <- leaflet(sf_joined) %>%
 map
 ```
 
+```{r}
+test <- lsat.pheno.dt %>%
+    group_by(sample.id) %>%
+    filter(spl.fit == min(spl.fit)) %>%
+    select(sample.id, min_evi = spl.fit, year)
+
+test <- test %>% 
+  group_by(sample.id) %>% 
+  filter(year == min(year)) %>% 
+  select(sample.id, min_evi, year) %>% 
+  distinct(sample.id, .keep_all = TRUE)
+```
+
+```{r}
+test <- test %>%
+  mutate(sample.num = as.numeric(str_extract(sample.id, "\\d+")))
+
+one_row_per_point_lsat <- lsat.dt %>% 
+  distinct(sample.id, .keep_all = TRUE)
+
+joined <- test %>% 
+  left_join(one_row_per_point_lsat, by = "sample.id")
+
+joined <- as.data.frame(joined)
+
+# Normalize the year values between 0 and 1
+joined <- joined %>% 
+  mutate(norm_year = (year.x - min(year.x)) / (max(year.x) - min(year.x)))
+
+# Convert your dataframe to a spatial object
+sf_joined <- st_as_sf(joined)
+
+# Define custom color palette with vibrant shades of red and green
+color_palette <- colorNumeric(
+  palette = c("#8B0000", "#FF6347", "#FFFFE0", "#ADFF2F", "#006400"),
+  domain = 1984:2024
+)
+
+# Create the leaflet map
+map <- leaflet() %>%
+  addProviderTiles("CartoDB.Positron") %>%
+  setView(lng = -75, lat = -8.6, zoom = 8.2) %>% 
+  addPolygons(data = top_10_peru, 
+              color = "grey", 
+              weight = 3) %>% 
+  addCircleMarkers(data = joined, 
+                   ~longitude, ~latitude, 
+                   fillColor = ~color_palette(year.x), 
+                   color = ~color_palette(year.x), 
+                   radius = 1, 
+                   fillOpacity = 1) %>% 
+  addLegend(position = "bottomright", 
+            pal = color_palette, 
+            values = ~year.x,
+            title = "Year",
+            opacity = 0.7,
+            labFormat = labelFormat(suffix = "", digits = 0, big.mark = ""))
+
+map  # Display the map
+```

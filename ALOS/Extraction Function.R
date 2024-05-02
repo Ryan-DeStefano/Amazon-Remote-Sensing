@@ -43,7 +43,8 @@ ALOS <- function (pixel_coords_sf, sample_id_from = "sample_id", chunks_from = N
   bands <- list("HH", "HV")
   BAND_LIST <- rgee::ee$List(bands)
   
-  ALOS_COLL <- rgee::ee$ImageCollection("JAXA/ALOS/PALSAR-2/Level2_2/ScanSAR")
+  ALOS_COLL <- rgee::ee$ImageCollection('JAXA/ALOS/PALSAR-2/Level2_2/ScanSAR')$
+    filterDate(start_date, end_date)
   ALL_BANDS <- BAND_LIST
   
   ADDON <- rgee::ee$Image(0)$float()$mask(mask_value)
@@ -52,18 +53,20 @@ ALOS <- function (pixel_coords_sf, sample_id_from = "sample_id", chunks_from = N
   mapped_function <- function(feature) {
     tryCatch({
       image <- ALOS_COLL$filterBounds(feature$geometry())$
-        filterDate(start_date, end_date)$
         map(function(image) {
           image = rgee::ee$Algorithms$If(image$bandNames()$size()$eq(rgee::ee$Number(2)), 
                                          image, image$addBands(ADDON))
           return(image)
         })$
-        select("HH", "HV")
+        map(function(image) {
+          return(image$float())
+        })$
+        first() # We take the first image since we're using reduceRegion, which expects a single image
       
       properties <- list("ASCENDING_DESCENDING_FLAG", "CLOUD_COVERAGE_ASSESSMENT", "FREQUENCY_BAND", 
                          "PRODUCT_TYPE", "relOrbitNumber_start")
       result <- rgee::ee$Feature(feature$geometry(), 
-                                 image$reduceRegion(reducer = rgee::ee$Reducer$mean(), 
+                                 image$reduceRegion(reducer = rgee::ee$Reducer$first(), 
                                                     geometry = feature$geometry(), 
                                                     scale = scale))
       
@@ -71,6 +74,8 @@ ALOS <- function (pixel_coords_sf, sample_id_from = "sample_id", chunks_from = N
       result <- result$copyProperties(image, properties)
       result <- result$set(sample_id_from, feature$get(sample_id_from))
       result <- result$set(chunks_from, feature$get(chunks_from))
+      result <- result$set("start_date", start_date)  # Add start_date as a column
+      
       
       return(result)
     }, error = function(e) {

@@ -5,75 +5,27 @@ editor: visual
 ---
 
 ```{r}
-task_list <- ALOS(test_sf)
+# Define start and end dates for the loop
+start_year <- 2014
+end_year <- 2024
+
+# Iterate over each year
+for (year in start_year:end_year) {
+  # Define start and end dates for the current year
+  start_date <- paste0(year, "-01-01")
+  end_date <- paste0(year + 1, "-01-01") # End of the year
+  
+  # Call the ALOS function for the current year
+  task_list <- ALOS(bruh, start_date = start_date, end_date = end_date, file_prefix = as.character(year))
+  
+  # Optionally, you can save or process the task_list here
+}
 ```
 
 ```{r}
-pixel_coords <- st_as_sf(data.frame(
-  lon = c(-47.93855, -48.53345, -48.75331),
-  lat = c(-1.301847, -2.467612, -2.438079)
-), coords = c("lon", "lat"), crs = 4326)
-
-# Call the ALOS function with the pixel coordinates
-ALOS_result <- ALOS(
-  pixel_coords_sf = pixel_coords,
-  sample_id_from = "sample_id",  # Specify the column name for sample IDs
-  chunks_from = NULL,  # Optional: specify the column name for chunk IDs
-  this_chunk_only = NULL,  # Optional: specify a specific chunk to process
-  max_chunk_size = 250,  # Maximum number of pixels per chunk
-  drive_export_dir = "alosTS_export",  # Specify the directory in Google Drive for export
-  file_prefix = "alosTS_export",  # Prefix for exported file names
-  start_date = "1984-01-01",  # Start date of the time-series data
-  end_date = "today",  # End date of the time-series data (use "today" for current date)
-  buffer_dist = 0,  # Optional: buffer distance around each pixel
-  scale = 100,  # Scale parameter for reduceRegion function
-  mask_value = 0  # Mask value for filtering pixels
-)
+task_list <- ALOS(bruh, start_date = '2020-02-01', end_date = '2021-01-01', file_prefix = "Monku3")
 ```
 
 ```{r}
-dataset <- ee$ImageCollection('JAXA/ALOS/PALSAR/YEARLY/SAR_EPOCH') %>%
-  ee$ImageCollection$filter(ee$Filter$date('2017-01-01', '2017-12-31')) # Change end date to cover entire year
 
-# Select the HH band
-sarHh <- dataset$select('HH')
-
-# Define the region of interest (ROI) as a point
-point <- ee$Geometry$Point(-138.90125, 69.58413)
-
-# Function to extract HH value at the specified point for each image
-extractHH <- function(image) {
-  # Extract HH value at the specified point
-  hhValue <- image$reduceRegion(
-    reducer = ee$Reducer$first(),
-    geometry = point,
-    scale = 25 # The scale of the data, in meters
-  )
-  # Return the HH value as a feature with a timestamp property
-  return(ee$Feature(NULL, list('HH_value' = hhValue$get('HH'), 'timestamp' = image$get('system:time_start'))))
-}
-
-# Initialize an empty feature collection to store the results
-hhValues <- ee$FeatureCollection$empty()
-
-# Iterate over each day in the time range and extract HH values
-start <- ee$Date('2017-01-01')
-end <- ee$Date('2017-12-31')
-days <- end$difference(start, 'day')$getInfo()
-for (i in 0:days) {
-  currentDate <- start$advance(i, 'day')
-  image <- sarHh$filterDate(currentDate, currentDate$advance(1, 'day'))$first()
-  if (!is.null(image)) {
-    hhFeature <- extractHH(image)
-    hhValues <- hhValues$merge(hhFeature)
-  }
-}
-
-# Export the HH values to a CSV file
-ee$Export$table.toDrive(
-  collection = hhValues,
-  description = 'HH_Values',
-  fileFormat = 'CSV',
-  selectors = c('HH_value', 'timestamp') # Specify the columns to include in the CSV
-)
 ```
