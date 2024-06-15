@@ -1,6 +1,6 @@
 ---
 title: "Brazil AOI Landsat Application"
-author: "Ryan DeStefano"
+authors: "Ryan DeStefano and Anna Makarewicz"
 format: 
   html:
     code-fold: true
@@ -31,13 +31,14 @@ Sampling points from the entirety of the plantations (not specific to plantation
 set.seed(27)
 
 paracrop <- st_read(
-  "C:/Users/Ryman/OneDrive/Documents/Thesis/ParaCropShapefiles (Master)/ParaCropShapefiles/ParaCropShapefiles.shp")
+  "/Users/annamakarewicz/Desktop/cs/snrproj/Amazon Remote Sensing/Brazil/ParaCropShapefiles.shp")
 
 paracrop <- st_make_valid(paracrop)
 
 # Check the current coordinate reference system
 st_crs(paracrop)
-
+# Assign CRS to paracrop (assuming it's EPSG:4326)
+st_crs(paracrop) <- st_crs(4326)
 # Transform to WGS84 (EPSG:4326)
 paracrop <- st_transform(paracrop, crs = 4326)
 
@@ -71,14 +72,12 @@ Sorting top 10 rows based on area and sampling a certain number of points from e
 
 ```{r}
 top_10_para <- paracrop %>% 
-  arrange(desc(Shape_Area)) 
+  arrange(desc(geometry)) 
 
-top_10_para$estimated_points <- top_10_para$Shape_Area / 0.00000006
-
-top_10_para <- top_10_para[948,]
+top_10_para$estimated_points <- top_10_para$geometry / 0.00000006
 
 bottom_10_para <- paracrop %>% 
-  arrange(Shape_Area) %>%
+  arrange(geometry) %>%
   slice_head(n = 10)
 
 # Define the number of points to sample from each polygon
@@ -174,14 +173,14 @@ for (i in 1){
     polys <- st_cast(poly, "POLYGON")
     for (j in 1:length(polys)){
       paracrop_poly <- st_sfc(polys[j], crs = 4326) %>% st_sf()
-      pixel_list_test_poly <- lsat_get_pixel_centers(paracrop_poly, plot_map=FALSE, pixel_prefix="S")
+      pixel_list_test_poly <- lsat_get_pixel_centers(paracrop_poly, plot_map=FALSE, pixel_prefix="S", lsat_WRS2_scene_bounds = "/Users/annamakarewicz/Desktop/cs/snrproj/WRS-2_bound_world_0.kml")
     
       all_pixel_lists[[i]] <- pixel_list_test_poly
     }
   }
   else{
     paracrop_poly <- st_sfc(poly, crs = 4326) %>% st_sf()
-    pixel_list_test_poly <- lsat_get_pixel_centers(paracrop_poly, plot_map=FALSE, pixel_prefix="S")
+    pixel_list_test_poly <- lsat_get_pixel_centers(paracrop_poly, plot_map=FALSE, pixel_prefix="S", lsat_WRS2_scene_bounds = "/Users/annamakarewicz/Desktop/cs/snrproj/WRS-2_bound_world_0.kml")
     
     all_pixel_lists[[i]] <- pixel_list_test_poly
   }
@@ -197,7 +196,7 @@ generate_strings <- function(n) {
 }
 
 # Example usage
-n <- 159  # Length of the sequence
+n <- nrow(pixels)  # Length of the sequence
 strings <- generate_strings(n)
 
 pixels$sample_id <- strings
@@ -213,9 +212,11 @@ task_list <- lsat_export_ts(test_sf, start_doy=1, end_doy=365)
 
 ```{r}
 # Create a vector of file names
-file_names <- paste0("lsatTS_export_chunk_", 1:37, ".csv")
+file_names <- paste0("lsatTS_export_chunk_", 1, ".csv")
 
-# Read each file and row-bind them together
+setwd("/Users/annamakarewicz/Desktop/cs/snrproj")
+
+# Read multiple data files specified in file_names using fread, then combine these data tables into a single data table (lsat.dt) by row-binding them together. The resulting data table lsat.dt will contain all the rows from the files read.
 lsat.dt <- do.call("rbind", lapply(file_names, fread))
 ```
 
@@ -238,66 +239,59 @@ lsat.dt <- lsat_calc_spectral_index(lsat.dt, si = 'evi')
 
 # Cross-calibrate NDVI among sensors using an approach based on Random Forest machine learning
 # Note: Need lots of observations for this to work
-lsat.dt <- lsat_calibrate_rf(lsat.dt, 
-                             band.or.si = 'evi', 
-                             doy.rng = 1:365, 
-                             min.obs = 5, 
-                             frac.train = 0.75, 
-                             overwrite.col = T, 
-                             write.output = F)
+#lsat.dt <- lsat_calibrate_rf(lsat.dt, 
+ #                            band.or.si = 'evi', 
+  #                           doy.rng = 1:365, 
+   #                          min.obs = 5, 
+    #                         frac.train = 0.75, 
+     #                        overwrite.col = T, 
+      #                       write.output = F)
 ```
 
+# `{r} # # Function to extract sample points that came from the same polygon, will be used to help fit the mean evi values of a polygon rather than individual sample points. Will need to be updated, works for when there are 10 points sampled from each polygon 
 ```{r}
-# Function to exract sample points that came from the same polygon, will be used to help fit the mean evi values of a polygon rather than individual sample points. Will need to be updated, works for when there are 10 points sampled from each polygon
-extract_group <- function(sample_id) {
-  group_number <- as.numeric(sub("S_", "", sample_id))
-  higher_order_group <- ((group_number - 1) %/% 20) + 1
-  return(higher_order_group)
-}
+extract_group <- function(sample_id) { 
+  group_number <- as.numeric(sub("S_", "", sample_id)) 
+  higher_order_group <- ((group_number - 1) %/% 20) + 1 
+  return(higher_order_group) } 
+```
 
-for (i in 1:nrow(lsat.dt)) {
-  range <- c(1, n_pts_per_polygon[i])
-  sample_ids <- range[1]:range[2]
-  
-}
+lsat.dt <- lsat.dt[!is.na(lsat.dt$n_pts_per_polygon), ] # for (i in 1:nrow(lsat.dt)) { #   print(paste("Processing row", i)) #   range <- c(1, lsat.dt$n_pts_per_polygon[i]) #    #   if (!is.na(range[2])) { #     print(paste("range[1]:", range[1])) #     print(paste("range[2]:", range[2])) #     sample_ids <- range[1]:range[2] #     print(paste("sample_ids:", sample_ids)) #      #     # Add your processing logic here using sample_ids #   } else { #     print("Skipping row due to NA value in n_pts_per_polygon") #   } # } #  # extract_group <- function(sample_id, group_lengths) { #   group_numbers <- as.numeric(sub("S_", "", sample_id)) #   cumulative_lengths <- c(0, cumsum(group_lengths)) #   higher_order_group <- rep(NA, length(sample_id)) #   for (i in 1:length(cumulative_lengths)) { #     if (i == 1) { #       higher_order_group[group_numbers <= cumulative_lengths[i]] <- i #     } else { #       higher_order_group[group_numbers > cumulative_lengths[i - 1] & group_numbers <= cumulative_lengths[i]] <- i #     } #   } #   return(higher_order_group) # } 
 
-extract_group <- function(sample_id, group_lengths) {
-  group_numbers <- as.numeric(sub("S_", "", sample_id))
-  cumulative_lengths <- c(0, cumsum(group_lengths))
-  higher_order_group <- rep(NA, length(sample_id))
-  for (i in 1:length(cumulative_lengths)) {
-    if (i == 1) {
-      higher_order_group[group_numbers <= cumulative_lengths[i]] <- i
-    } else {
-      higher_order_group[group_numbers > cumulative_lengths[i - 1] & group_numbers <= cumulative_lengths[i]] <- i
-    }
-  }
-  return(higher_order_group)
-}
-
+```{r}
 means <- lsat.dt %>%
-  mutate(group.id = extract_group(sample.id, n_pts_per_polygon))
+  mutate(group.id = extract_group(sample.id)) 
 
 means$group.id <- means$group.id - 1
 
 grouped_means <- means %>%
-  group_by(doy, year, group.id) %>%
-  summarize(evi = mean(evi))
+  group_by(doy, year, group.id) %>% 
+    summarize(evi = mean(evi)) 
+    
+grouped_means <- filter(grouped_means, year >= 2010) #  # source("/Users/annamakarewicz/Desktop/cs/snrproj/Updated_curve_fit (mean, no points).R") # # Fit phenological models (cubic splines) to each time series (Took out vi.min arg) # #lsat.pheno.dt <- updated_curve_fit_mean(grouped_means, si = 'evi', spar = .6)`
 
-# grouped_means <- filter(grouped_means, year >= 2010)
-
-# Fit phenological models (cubic splines) to each time series (Took out vi.min arg)
-lsat.pheno.dt <- updated_curve_fit_mean(grouped_means, si = 'evi', spar = .6)
-```
-
-```{r}
 # lsat.dt <- filter(lsat.dt, year >= 2010)
 
+source("/Users/annamakarewicz/Desktop/cs/snrproj/Updated_curve_function (no points).R")
 # Fit phenological models (cubic splines) to each time series (Took out vi.min arg)
 lsat.pheno.dt <- fit_phenological_curve_no_points(lsat.dt, si = 'evi', spar = .6)
 
 # Gives some summary stats on the phenological curve fits
 lsat.gs.dt <- lsat_summarize_growing_seasons(lsat.pheno.dt, si = 'evi', min.frac.of.max = 0.75)
+
+# Combine year and day of year into a continuous time variable
+lsat.pheno.dt$continuous_time <- lsat.pheno.dt$year + (lsat.pheno.dt$doy / 365)
+
+# Plot EVI as a function of continuous time (year + fraction of year)
+ggplot(lsat.pheno.dt, aes(x = continuous_time, y = evi)) +
+  geom_line() +
+  labs(title = "EVI from 1990 to 2020",
+       x = "Year",
+       y = "Landsat EVI",
+       color = "Sample ID") +
+  theme_minimal() +
+  facet_wrap(~ as.factor(sample.id), scales = "free_y", nrow = 2) +
+  theme(legend.position = "right")
 ```
 
 ```{r}
@@ -347,47 +341,61 @@ This creates a dataframe that contains each of the plantations and the year that
 
 ```{r}
 min_evi_plantation <- grouped_means %>%
-    group_by(group.id) %>%
-    filter(evi == min(evi)) %>%
-    select(group.id, min_evi = evi, year)
+    dplyr::filter(evi == min(evi)) %>%
+    dplyr::select(group.id, min_evi = evi, year)
 
 min_evi_plantation <- min_evi_plantation %>%
-    group_by(group.id) %>%
-    filter(year == min(year)) %>%
-    select(group.id, min_evi, year)
+  group_by(group.id) %>%
+  filter(year == min(year)) %>%
+  ungroup() %>%
+  dplyr::select(group.id, min_evi, year)
+
+
 ```
 
 This creates a dataframe that contains each of the sample points and the year that he minimum evi value was observed.
 
 ```{r}
 min_evi_sample <- means %>%
-    group_by(sample.id) %>%
-    filter(evi == min(evi)) %>%
-    select(sample.id, min_evi = evi, year)
+  group_by(sample.id) %>%
+  slice(which.min(evi)) %>%
+  ungroup() %>%
+  rename(min_evi = evi) %>%
+  dplyr::select(sample.id, min_evi, year)
 ```
 
 The following code tracks and plots the minimum evi year for each plantation based on the fitted curves and plots a choropleth map based on the year values
 
 ```{r}
 test <- lsat.pheno.dt %>%
-    group_by(group.id) %>%
-    filter(spl.fit == min(spl.fit)) %>%
-    select(group.id, min_evi = spl.fit, year)
+    group_by(sample.id) %>%
+    dplyr::filter(spl.fit == min(spl.fit)) %>%
+    ungroup() %>%
+  rename(min_evi = spl.fit) %>%
+  dplyr::select(sample.id, min_evi, year)
 
 test <- test %>% 
-  group_by(group.id) %>% 
-  filter(year == min(year)) %>% 
-  select(group.id, min_evi, year) %>% 
-  distinct(group.id, .keep_all = TRUE)
+  group_by(sample.id) %>% 
+  dplyr::filter(year == min(year)) %>% 
+  dplyr::select(sample.id, min_evi, year) %>% 
+  distinct(sample.id, .keep_all = TRUE)
 ```
 
 ```{r}
-top_10_brazil$group.id <- 1:nrow(top_10_brazil)
+top_10_para$group.id <- 1:nrow(top_10_para)
 
-joined <- test %>% 
-  left_join(top_10_brazil, by = "group.id")
+joined <- test %>%
+  mutate(group.id = as.integer(sample.id)) %>%
+  left_join(top_10_para, by = "group.id")
 
 joined <- as.data.frame(joined)
+
+# Ensure that 'year' is numeric
+joined$year <- as.numeric(joined$year)
+
+# Handle any potential NA values in the 'year' column
+joined <- joined %>%
+  filter(!is.na(year))
 
 # Normalize the year values between 0 and 1
 joined <- joined %>% 
@@ -401,6 +409,8 @@ color_palette <- colorNumeric(
   palette = c("#8B0000", "#FF6347", "#FFFFE0", "#ADFF2F", "#006400"),
   domain = 1984:2024
 )
+
+sf_joined <- st_cast(sf_joined, "MULTIPOLYGON")
 
 # Create leaflet map with legend
 map <- leaflet(sf_joined) %>%
