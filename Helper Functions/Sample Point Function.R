@@ -1,20 +1,19 @@
-num_sample_points <- function(dataset){ 
+# Function to calculate the number of sample points to extract from each plantation
+num_sample_points <- function(dataset) {
   
   num_points_vector <- c()
   
-  for (i in 1:nrow(dataset)){
+  for (i in 1:nrow(dataset)) {
     estimated <- dataset$estimated_points[i]
     
-    if (estimated < 10){
+    if (estimated < 10) {
       num_points <- 1
-    }
-    else if (estimated > 200){
+    } else if (estimated > 200) {
       num_points <- 20
+    } else {
+      num_points <- max(1, as.integer(estimated * 0.1))
     }
-    else {
-      num_points <- max(1, as.integer(estimated*.1))
-    }
-  
+    
     num_points_vector <- c(num_points_vector, num_points)
   }
   
