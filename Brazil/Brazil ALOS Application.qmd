@@ -1,0 +1,199 @@
+```{r}
+#| message: false
+library(sf)
+library(dplyr)
+library(purrr)
+library(data.table)
+library(stringr)
+library(rgee)
+library(lwgeom)
+library(leaflet)
+library(ggplot2)
+library(LandsatTS)
+library(lubridate)
+```
+
+```{r}
+# Create a vector to store the file names
+file_names <- character()
+
+# Loop through each file number
+for (i in c(1:2, 4:7, 9:10, 12:13, 17, 19, 21:22, 25, 28:29, 31, 33:35, 37:39, 41:44, 46:48, 50:52, 54:56, 58:60, 62:64, 67:68, 71:72, 74:76, 78:80, 83:84, 86:88, 90:93, 96:97, 99:100, 102:105, 107:108, 111)) {
+  # Construct the file name
+  file_name <- paste0(i, "_chunk_1", ".csv")
+  # Append the file name to the vector
+  file_names <- c(file_names, file_name)
+}
+
+# Alternatively, using rbindlist
+ALOS.df <- rbindlist(lapply(file_names, fread), fill = TRUE)
+```
+
+```{r}
+# Create column for HH to HV ratio
+ALOS.df <- ALOS.df %>% 
+  mutate(ratio = HH / HV,
+         year = year(start_date),
+         month = month(start_date)
+  )
+```
+
+```{r}
+combined_function <- function(joined_df, ALOS_df, group_ids) {
+  extract_group <- function(sample_id, group_ids) {
+    group_number <- as.numeric(sub("S_", "", sample_id))
+    group_index <- ((group_number - 1) %/% 30) %% length(group_ids) + 1
+    return(group_ids[group_index])
+  }
+  
+  # Filter for the years 2015 or later
+  alos <- joined_df %>% 
+    filter(year >= 2015)
+  
+  # Pull the vector of group.ids
+  group_id_vector <- alos$group.id
+  
+  # Assign the group.ids
+  ALOS_df <- ALOS_df %>%
+    mutate(group.id = extract_group(sample_id, group_id_vector)) %>% 
+    filter(!is.na(ratio))
+  
+  # Find mean ratio value for each year, month, group.id combo
+  means <- ALOS_df %>%
+    group_by(year, month, group.id) %>%
+    summarize(ratio = mean(ratio))
+  
+  # Count the number of means there are per group.id, how many observations per plantation
+  group_counts <- means %>%
+    group_by(group.id) %>%
+    summarize(count = n())
+  
+  # Filter out groups with less than 20 rows
+  filtered_groups <- group_counts %>%
+    filter(count >= 20)
+  
+  # Filter the original dataframe based on the filtered groups
+  means <- means %>%
+    filter(group.id %in% unique(filtered_groups$group.id))
+  
+  return(means)
+}
+
+means <- combined_function(joined, ALOS.df, group.id_vector)
+```
+
+```{r}
+# Convert year and month to Date format
+means$date <- as.Date(paste(means$year, means$month, "01", sep = "-"))
+
+# Get 9 random group IDs
+random_group_ids <- sample(unique(means$group.id), 9)
+
+# Initialize the plot layout
+par(mfrow = c(3, 3))
+
+# Plot the data for each selected group ID
+for (id in random_group_ids) {
+  gr <- means %>% 
+    filter(group.id == id)
+  
+  smooth <- stats::smooth.spline(gr$date, gr$ratio, spar = 0.3)  # Compute smooth spline
+  
+  smooth_df <- data.frame(date = as.Date(smooth$x), ratio = smooth$y)  # Convert date to Date object
+  
+  p <- ggplot(gr, aes(x = date, y = ratio)) +
+    geom_point() +
+    geom_line(data = smooth_df, aes(date, ratio), color = "red") +  # Add smooth spline to plot
+    labs(x = "Date", y = "HH/HV", title = paste("Group", id)) +
+    theme_bw()
+  
+  print(p)
+}
+```
+
+```{r}
+# Initialize a list to store the information for each group ID
+max_spline_info <- list()
+
+# Loop through each group ID
+for (id in unique(means$group.id)) {
+  # Filter data for the current group ID
+  gr <- means %>% 
+    filter(group.id == id)
+  
+  # Fit a spline to the data for the current group ID using smooth.spline
+  spline_fit <- stats::smooth.spline(gr$date, gr$ratio, spar = .2)
+  
+  # Extract fitted values from the spline fit
+  fitted_values <- spline_fit$y
+  
+  # Find the maximum fitted spline value and its corresponding year
+  max_spline_value <- max(fitted_values)
+  max_spline_year <- format(gr$date[which.max(fitted_values)], "%Y")
+  
+  # Store the information in the list
+  max_spline_info[[id]] <- list(group.id = id, max_spline_value = max_spline_value, max_spline_year = max_spline_year)
+}
+
+# Convert the list to a dataframe
+max_spline_df <- do.call(rbind, max_spline_info) %>% as.data.frame()
+
+# Convert the group.id column to a double
+max_spline_df$group.id <- as.double(max_spline_df$group.id)
+
+# Join the alos datset to the max spline dataset
+comparison <- max_spline_df %>% 
+  left_join(alos, by = "group.id") %>% 
+  mutate(difference = abs(as.integer(max_spline_year) - as.integer(year))) %>% 
+  select(group.id, max_spline_year, year, difference, geometry)
+
+# Calculate the table of counts for each difference value
+difference_table <- table(comparison$difference)
+
+# Calculate the proportions for each difference value
+proportion_table <- prop.table(difference_table)
+
+# Combine the count and proportion tables into a single dataframe
+result_table <- data.frame(difference = as.numeric(names(difference_table)),
+                           proportion = round(as.numeric(proportion_table), 4))
+
+result_table
+
+# Convert 'year_diff' to a factor
+result_table <- result_table %>% 
+  mutate(difference = as.factor(difference))
+
+# Create the bar plot
+ggplot(result_table, aes(x = difference, y = proportion)) +
+  geom_bar(stat = "identity", fill = "skyblue") +
+  labs(x = "Prediction Year Difference", y = "Proportion") +
+  theme_bw()
+```
+
+```{r}
+# Convert dataframe to a spatial object
+sf_joined <- st_as_sf(comparison)
+
+# Define custom color palette with vibrant shades of red and green
+color_palette <- colorNumeric(
+  palette = c("#8B0000", "#FF6347", "#FFFFE0", "#ADFF2F", "#006400"),
+  domain = 1984:2024
+)
+
+# Create leaflet map with legend
+map <- leaflet(sf_joined) %>%
+  addProviderTiles("CartoDB.Positron") %>%
+  setView(lng = -50, lat = -1, zoom = 8.2) %>%
+  addPolygons(data = sf_joined, fillColor = ~color_palette(as.integer(max_spline_year)), 
+              color = "grey", weight = 1, opacity = 1, fillOpacity = 0.7) %>%
+  addLegend(position = "bottomright", 
+            pal = color_palette, 
+            values = ~year,
+            title = "Year",
+            opacity = 0.7,
+            labFormat = labelFormat(suffix = "", digits = 0, big.mark = "")) %>% 
+    addScaleBar(options = scaleBarOptions(imperial = FALSE))
+
+            
+map
+```
