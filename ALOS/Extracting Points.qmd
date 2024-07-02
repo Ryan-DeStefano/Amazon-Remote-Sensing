@@ -115,3 +115,35 @@ for (i in 1:nrow(alos)) {
 test_sf <- st_as_sf(test, wkt = "geometry", crs=4326)
 
 ```
+
+```{r}
+# Define start and end dates for the loop
+start_year <- 2015
+end_year <- 2024
+i <- 1
+
+# Iterate over each year
+for (year in start_year:end_year) {
+  # Iterate over each month within the year
+  for (month in 1:12) {
+    # Define start and end dates for the current month
+    start_date <- paste0(year, "-", sprintf("%02d", month), "-01")
+    print(start_date)
+    if (month < 12) {
+      end_date <- paste0(year, "-", sprintf("%02d", month + 1), "-01")
+    } else {
+      # If it's December, move to the next year
+      end_date <- paste0(year + 1, "-01-01")
+    }
+    
+    # Call the ALOS function for the current month
+    task_list <- ALOS(test_sf, start_date = start_date, end_date = end_date, file_prefix = as.character(i))
+    
+    i = i + 1
+    
+    # Optionally, you can save or process the task_list here
+  }
+}
+
+## Stopped it after 2016-01-01 finsihed.
+```
