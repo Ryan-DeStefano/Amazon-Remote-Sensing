@@ -1,5 +1,5 @@
 ALOS <- function (pixel_coords_sf, sample_id_from = "sample_id", chunks_from = NULL, 
-                  this_chunk_only = NULL, max_chunk_size = 250, drive_export_dir = "alosTS_export", 
+                  this_chunk_only = NULL, max_chunk_size = 100000, drive_export_dir = "alosTS_export", 
                   file_prefix = "alosTS_export", start_date = "1984-01-01", end_date = "today", 
                   buffer_dist = 0, scale = 100, mask_value = 0) 
 {
