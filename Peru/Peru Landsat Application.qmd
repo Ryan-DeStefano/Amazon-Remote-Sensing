@@ -13,6 +13,7 @@ execute:
 ---
 
 ```{r}
+#| message: false
 library(sf)
 library(dplyr)
 library(purrr)
@@ -26,25 +27,13 @@ library(LandsatTS)
 ```
 
 ```{r}
-# Path to the GeoJSON file
-geojson_file <- "04 Dataset_Ucayali_Palm_V2.geojson"
-
-# Read the GeoJSON file
-main <- st_read(geojson_file)
-
-# Path to output shapefile (without file extension)
-output_shapefile <- "04 Dataset_Ucayali_Palm_V2.shp"
-
-# Write the spatial data to a shapefile
-st_write(geojson_data, dsn = output_shapefile)
-```
-
-```{r}
 set.seed(27)
 
+# Read in the polygon shapefile
 main <- st_read(
   "04 Dataset_Ucayali_Palm_V2.geojson")
 
+# Fix any possible line overlap
 main <- st_make_valid(main)
 
 # Check the current coordinate reference system
@@ -56,25 +45,13 @@ main <- st_transform(main, crs = 4326)
 
 ```{r}
 main <- main[st_is_valid(main),]
-
-# Preallocate the areas vector
-areas <- numeric(nrow(main))
-
-# Loop through each geometry
-for (i in 1:nrow(main)) {
-  area <- st_area(main$geometry[i])
-  areas[i] <- area
-}
-
-main$AREA <- areas
 ```
 
 ```{r}
-top_10_peru <- main 
+# Rename the dataset
+peru <- main 
 
-top_10_peru$estimated_points <- top_10_peru$AREA / 2
-
-# Provided vector
+# Initialize the vecotr of number of points to take from the brazil application
 provided_vector <- c(rep(20, 325), rep(19, 4), rep(18, 9), rep(17, 9), rep(16, 9), 
                      rep(15, 6), rep(14, 9), rep(13, 8), rep(12, 9), rep(11, 9), 
                      rep(10, 9), rep(9, 18), rep(8, 18), rep(7, 27), rep(6, 36), 
@@ -108,9 +85,9 @@ test <- tibble(geometry = vector("list", sum(n_pts_per_polygon)),
 sample_counter <- 1
 
 # Loop through each region to sample points
-for (i in 1:nrow(top_10_peru)) {
+for (i in 1:nrow(peru)) {
   # Sample points from the i-th polygon
-  pts <- st_sample(x = top_10_peru[i, ], size = n_pts_per_polygon[i])
+  pts <- st_sample(x = peru[i, ], size = n_pts_per_polygon[i])
   
   # Convert the sampled points to their WKT representation
   point_wkt <- st_as_text(pts)
@@ -127,14 +104,13 @@ for (i in 1:nrow(top_10_peru)) {
   sample_counter <- end_index + 1
 }
 
+# Convert to a spatial object
 test_sf <- st_as_sf(test, wkt = "geometry", crs=4326)
 
-rerun <- test_sf[11251:11500, ]
-
+# Plot the polygons
 leaflet() %>%
   addProviderTiles('Esri.WorldImagery') %>%
-  
-  addPolygons(data = top_10_peru,
+  addPolygons(data = peru,
               color = 'white',
               weight = 3) %>%
   addScaleBar(options = scaleBarOptions(imperial = FALSE))
@@ -145,10 +121,13 @@ leaflet() %>%
 lat <- -8.179632
 lon <- -74.95231
 
+# Plot general Peru location
 leaflet() %>%
   addProviderTiles('Esri.WorldImagery') %>%
   addScaleBar(options = scaleBarOptions(imperial = FALSE)) %>%
-  addMarkers(lat = lat, lng = lon, popup = "Peru Plantations")
+  addMarkers(lat = lat, lng = lon, popup = "Peru Plantations")  %>%
+  setView(lng = lon, lat = lat, zoom = 2.5) %>% 
+  addScaleBar(options = scaleBarOptions(imperial = FALSE))
 
 ```
 
@@ -159,8 +138,6 @@ task_list <- lsat_export_ts(rerun, start_doy=1, end_doy=365)
 ```{r}
 # Create a vector of file names
 file_names <- paste0("lsatTS_export_chunk_", 1:50, ".csv")
-
-file_names <- paste0("C:/Users/Ryman/OneDrive/Documents/Thesis/Exported Pixels/Test/lsatTS_export_chunk_1.csv")
 
 # Read each file and row-bind them together
 lsat.dt <- do.call("rbind", lapply(file_names, fread))
@@ -195,19 +172,7 @@ lsat.dt <- lsat_calibrate_rf(lsat.dt,
 ```
 
 ```{r}
-# Function to exract sample points that came from the same polygon, will be used to help fit the mean evi values of a polygon rather than individual sample points. Will need to be updated, works for when there are 10 points sampled from each polygon
-extract_group <- function(sample_id) {
-  group_number <- as.numeric(sub("S_", "", sample_id))
-  higher_order_group <- ((group_number - 1) %/% 20) + 1
-  return(higher_order_group)
-}
-
-for (i in 1:nrow(lsat.dt)) {
-  range <- c(1, n_pts_per_polygon[i])
-  sample_ids <- range[1]:range[2]
-  
-}
-
+# Function to put sample points into groups based on the plantation theyw ere part of
 extract_group <- function(sample_id, group_lengths) {
   group_numbers <- as.numeric(sub("S_", "", sample_id))
   cumulative_lengths <- c(0, cumsum(group_lengths))
@@ -222,28 +187,29 @@ extract_group <- function(sample_id, group_lengths) {
   return(higher_order_group)
 }
 
-means <- lsat.dt %>%
+# Assign the group.ids
+groups <- lsat.dt %>%
   mutate(group.id = extract_group(sample.id, n_pts_per_polygon))
 
-means$group.id <- means$group.id - 1
+# Fix the magnitude of the group.id being off by one
+groups$group.id <- groups$group.id - 1
 
-grouped_means <- means %>%
+# Find the mean evi value for each of group, day, year combo
+grouped_means <- groups %>%
   group_by(doy, year, group.id) %>%
   summarize(evi = mean(evi))
 
-bruh <- filter(grouped_means, group.id == 1036)
+#bruh <- filter(grouped_means, group.id == 1036)
 
 # Fit phenological models (cubic splines) to each time series (Took out vi.min arg)
-lsat.pheno.dt <- updated_curve_fit_mean(grouped_means,  si = 'evi', spar = .6)
+lsat.pheno.dt <- updated_curve_fit_mean(grouped_means, si = 'evi', spar = .6, window.yrs = 3)
 ```
 
 ```{r}
 bruh <- filter(lsat.dt, sample.id == "S_10")
 
-# Fit phenological models (cubic splines) to each time series (Took out vi.min arg)
+# Fit phenological models (cubic splines) to each time series (Took out vi.min arg) for individual sample points instead of plantations
 lsat.pheno.dt <- fit_phenological_curve_no_points(lsat.dt, si = 'evi', spar = .6)
-
-lsat.pheno.dt <- lsat_fit_phenological_curves(bruh, si = 'evi', spar = .6)
 
 # Gives some summary stats on the phenological curve fits
 lsat.gs.dt <- lsat_summarize_growing_seasons(lsat.pheno.dt, si = 'evi', min.frac.of.max = 0.75)
@@ -286,42 +252,19 @@ leaflet() %>%
   addLegend('bottomright',
             colors=colors.dt$trend.color,
             labels=colors.dt$trend.cat,
-            title='NDVImax trend',
+            title='EVImax trend',
             opacity=1)
 ```
 
-This creates a dataframe that contains each of the plantations and the year that the minimum evi value was observed
-
 ```{r}
-min_evi_plantation <- grouped_means %>%
-    group_by(group.id) %>%
-    filter(evi == min(evi)) %>%
-    select(group.id, min_evi = evi, year)
-
-min_evi_plantation <- min_evi_plantation %>%
-    group_by(group.id) %>%
-    filter(year == min(year)) %>%
-    select(group.id, min_evi, year)
-```
-
-This creates a dataframe that contains each of the sample points and the year that he minimum evi value was observed.
-
-```{r}
-min_evi_sample <- means %>%
-    group_by(sample.id) %>%
-    filter(evi == min(evi)) %>%
-    select(sample.id, min_evi = evi, year)
-```
-
-The following code tracks and plots the minimum evi year for each plantation based on the fitted curves and plots a choropleth map based on the year values
-
-```{r}
-test <- lsat.pheno.dt %>%
+# Only keep the row with the minimum spline fit (predicted value) for each of the plantations (group.ids)
+min_evi <- lsat.pheno.dt %>%
     group_by(group.id) %>%
     filter(spl.fit == min(spl.fit)) %>%
     select(group.id, min_evi = spl.fit, year)
 
-test <- test %>% 
+# Sometimes there ar emultiple spline fit minimums, keept the row that has the year furthest back
+min_evi <- min_evi %>% 
   group_by(group.id) %>% 
   filter(year == min(year)) %>% 
   select(group.id, min_evi, year) %>% 
@@ -329,11 +272,14 @@ test <- test %>%
 ```
 
 ```{r}
-top_10_peru$group.id <- 1:nrow(top_10_peru)
+# Assign a group.id to the original dataframe
+peru$group.id <- 1:nrow(peru)
 
-joined <- test %>% 
-  left_join(top_10_peru, by = "group.id")
+# Join min_evi and peru by group.id
+joined <- min_evi %>% 
+  left_join(peru, by = "group.id")
 
+# convert to dataframe
 joined <- as.data.frame(joined)
 
 # Normalize the year values between 0 and 1
@@ -360,68 +306,77 @@ map <- leaflet(sf_joined) %>%
             values = ~year,
             title = "Year",
             opacity = 0.7,
-            labFormat = labelFormat(suffix = "", digits = 0, big.mark = ""))
+            labFormat = labelFormat(suffix = "", digits = 0, big.mark = "")) %>% 
+    addScaleBar(options = scaleBarOptions(imperial = FALSE)) %>% 
+    leafletOptions(zoomSnap = 0.05)
+
             
 map
 ```
 
 ```{r}
-test <- lsat.pheno.dt %>%
-    group_by(sample.id) %>%
-    filter(spl.fit == min(spl.fit)) %>%
-    select(sample.id, min_evi = spl.fit, year)
-
-test <- test %>% 
-  group_by(sample.id) %>% 
-  filter(year == min(year)) %>% 
-  select(sample.id, min_evi, year) %>% 
-  distinct(sample.id, .keep_all = TRUE)
+ggplot(joined, aes(x = year)) +
+  geom_density(alpha = 0.5, fill = "skyblue") +
+  labs(x = "Deforestation Year", y = "Density") +
+  theme_bw()
 ```
 
+Getting table that displays the proportion of deforestation by year.
+
 ```{r}
-test <- test %>%
-  mutate(sample.num = as.numeric(str_extract(sample.id, "\\d+")))
+# Initialize a new_year column
+joined$new_year <- NA
 
-one_row_per_point_lsat <- lsat.dt %>% 
-  distinct(sample.id, .keep_all = TRUE)
+# Bin the years based on their value
+for (i in 1:nrow(joined)){
+  
+  if (joined$year[i] >= 1984 & joined$year[i] <= 1993){
+    joined$new_year[i] = "1984-1993"
+  }
+  
+  else if (joined$year[i] >= 1994 & joined$year[i] <= 2003){
+    joined$new_year[i] = "1994-2003"
+  }
+  
+  else if (joined$year[i] >= 2004 & joined$year[i] <= 2013){
+    joined$new_year[i] = "2004-2013"
+  }
+  
+  else if (joined$year[i] >= 2014){
+    joined$new_year[i] = "2014+"
+  }
+}
 
-joined <- test %>% 
-  left_join(one_row_per_point_lsat, by = "sample.id")
+# Calculate the count of rows for each unique year
+year_counts <- joined %>%
+  group_by(new_year) %>%
+  summarize(row_count = n())
 
-joined <- as.data.frame(joined)
+# Calculate the proportion of rows for each unique year
+year_proportions <- year_counts %>%
+  mutate(proportion = row_count / nrow(joined))
 
-# Normalize the year values between 0 and 1
-joined <- joined %>% 
-  mutate(norm_year = (year.x - min(year.x)) / (max(year.x) - min(year.x)))
+year_proportions
+```
 
-# Convert your dataframe to a spatial object
-sf_joined <- st_as_sf(joined)
+Playing with tracking the year that the value is most different from its typical value at that day of the year.
 
-# Define custom color palette with vibrant shades of red and green
-color_palette <- colorNumeric(
-  palette = c("#8B0000", "#FF6347", "#FFFFE0", "#ADFF2F", "#006400"),
-  domain = 1984:2024
-)
+```{r}
+average_evi <- lsat.pheno.dt %>%
+  group_by(group.id, doy) %>%
+  summarize(avg_evi = mean(spl.fit))
 
-# Create the leaflet map
-map <- leaflet() %>%
-  addProviderTiles("CartoDB.Positron") %>%
-  setView(lng = -75, lat = -8.6, zoom = 8.2) %>% 
-  addPolygons(data = top_10_peru, 
-              color = "grey", 
-              weight = 3) %>% 
-  addCircleMarkers(data = joined, 
-                   ~longitude, ~latitude, 
-                   fillColor = ~color_palette(year.x), 
-                   color = ~color_palette(year.x), 
-                   radius = 1, 
-                   fillOpacity = 1) %>% 
-  addLegend(position = "bottomright", 
-            pal = color_palette, 
-            values = ~year.x,
-            title = "Year",
-            opacity = 0.7,
-            labFormat = labelFormat(suffix = "", digits = 0, big.mark = ""))
+# Merge the average EVI values back to the original dataframe
+a <- merge(lsat.pheno.dt, average_evi, by = c("group.id", "doy"))
 
-map  # Display the map
+# Calculate the difference between each year's EVI value and the average EVI value for that day of the year
+b <- a %>%
+  mutate(evi_difference = spl.fit - avg_evi)
+
+# Find the year with the maximum absolute difference for each farm
+year_of_max_difference <- b %>%
+  group_by(group.id) %>%
+  filter(abs(evi_difference) == max(abs(evi_difference))) %>%
+  select(group.id, year)
+
 ```
