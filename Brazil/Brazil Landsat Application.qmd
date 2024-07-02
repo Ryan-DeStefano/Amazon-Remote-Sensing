@@ -1,6 +1,6 @@
 ---
 title: "Brazil AOI Landsat Application"
-authors: "Ryan DeStefano and Anna Makarewicz"
+author: "Ryan DeStefano"
 format: 
   html:
     code-fold: true
@@ -13,6 +13,7 @@ execute:
 ---
 
 ```{r}
+#| message: false
 library(sf)
 library(dplyr)
 library(purrr)
@@ -25,94 +26,78 @@ library(LandsatTS)
 library(ggplot2)
 ```
 
-Sampling points from the entirety of the plantations (not specific to plantation)
-
 ```{r}
-set.seed(27)
+read_shapefile <- function(filepath, crs) {
+  
+  # Read in the file
+  file <- st_read(filepath)
 
-paracrop <- st_read(
-  "/Users/annamakarewicz/Desktop/cs/snrproj/Amazon Remote Sensing/Brazil/ParaCropShapefiles.shp")
+  # Make it valid, gets rid of crossing polygon lines etc.
+  file <- st_make_valid(file)
+  
+  # Transform to WGS84 (EPSG:4326)
+  file <- st_transform(file, crs = crs)
 
-paracrop <- st_make_valid(paracrop)
+}
 
-# Check the current coordinate reference system
-st_crs(paracrop)
-# Assign CRS to paracrop (assuming it's EPSG:4326)
-st_crs(paracrop) <- st_crs(4326)
-# Transform to WGS84 (EPSG:4326)
-paracrop <- st_transform(paracrop, crs = 4326)
+# Read in the shapefile
+paracrop <- read_shapefile("C:/Users/Ryman/OneDrive/Documents/Thesis/ParaCropShapefiles (Master)/ParaCropShapefiles/ParaCropShapefiles.shp", 4326)
 
-# Sample points
-n.pts <- 1
-test.pts.sf <- st_sample(x = paracrop, size = n.pts) %>% st_sf()
-test.pts.sf$sample_id <- paste0('S_', 1:n.pts)
-
-# Creating the Leaflet map
-leaflet() %>%
-  addProviderTiles('Esri.WorldImagery') %>%
-  addPolygons(data = paracrop,
-              color = 'white',
-              weight = 3) %>%
-  addScaleBar(options = scaleBarOptions(imperial = FALSE))
-
-lat <- -2.769433
-lon <- -51.627340
-
-lat <- -8.179632
-lon <- -74.95231
-
+# Plot the general location of the polygons, change the longitude and latitude as needed
 leaflet() %>%
   addProviderTiles('Esri.WorldImagery') %>%
   addScaleBar(options = scaleBarOptions(imperial = FALSE)) %>%
-  addMarkers(lat = lat, lng = lon, popup = "Peru Plantations") %>% 
-  addMarkers(lat = -8.179, lng = -74.952)
+  addMarkers(lat = -1.5, lng = -50.91394) %>%
+  setView(lng = -50.91394, lat = -1.5, zoom = 2.5)
 ```
 
-Sorting top 10 rows based on area and sampling a certain number of points from each area (specific to plantation). USED THIS FOR Top_10_Brazil_1 and 2
-
 ```{r}
-top_10_para <- paracrop %>% 
-  arrange(desc(geometry)) 
+para <- paracrop %>% 
+  arrange(desc(Shape_Area)) %>% 
+  mutate(estimated_points = Shape_Area / 0.00000006)
 
-top_10_para$estimated_points <- top_10_para$geometry / 0.00000006
+# Define the function to sample points from polygons and store in a tibble
+sample_points_from_polygons <- function(dataframe, n_pts_per_polygon) {
+  # Create an empty tibble to store the sampled points
+  test <- tibble(geometry = vector("list", sum(n_pts_per_polygon)),
+                 sample_id = character(sum(n_pts_per_polygon)))
 
-bottom_10_para <- paracrop %>% 
-  arrange(geometry) %>%
-  slice_head(n = 10)
+  # Initialize the sample ID counter
+  sample_counter <- 1
 
-# Define the number of points to sample from each polygon
-n.pts_per_polygon <- 1  # Change this value as needed
+  # Loop through each region to sample points
+  for (i in 1:nrow(para)) {
+    # Sample points from the i-th polygon
+    pts <- st_sample(x = para[i, ], size = n_pts_per_polygon[i])
+    
+    # Convert the sampled points to their WKT representation
+    point_wkt <- st_as_text(pts)
+    
+    # Determine the indices to store the sampled points
+    start_index <- sample_counter
+    end_index <- sample_counter + n_pts_per_polygon[i] - 1
+    
+    # Store the WKT representation of the sampled point geometries and sample IDs in the test tibble
+    test$geometry[start_index:end_index] <- point_wkt
+    test$sample_id[start_index:end_index] <- paste0('S_', start_index:end_index)
+          
+    # Increment the sample ID counter
+    sample_counter <- end_index + 1
+  }
 
-# Create an empty tibble to store the sampled points
-test <- tibble(geometry = vector("list", nrow(top_10_para) * n.pts_per_polygon),
-               sample_id = character(nrow(top_10_para) * n.pts_per_polygon))
-
-# Initialize the sample ID counter
-sample_counter <- 1
-
-# Loop through each region to sample points
-for (i in 1:nrow(top_10_para)) {
-  # Sample points from the i-th polygon
-  pts <- st_sample(x = top_10_para[i, ], size = n.pts_per_polygon)
+  # Convert the test tibble to an sf object
+  test_sf <- st_as_sf(test, wkt = "geometry", crs = 4326)
   
-  # Convert the sampled points to their WKT representation
-  point_wkt <- st_as_text(pts)
-  
-  # Determine the indices to store the sampled points
-  start_index <- (i - 1) * n.pts_per_polygon + 1
-  end_index <- i * n.pts_per_polygon
-  
-  # Store the WKT representation of the sampled point geometries and sample IDs in the test tibble
-  test$geometry[start_index:end_index] <- point_wkt
-  test$sample_id[start_index:end_index] <- paste0('S_', sample_counter:(sample_counter + n.pts_per_polygon - 1))
-        
-  # Increment the sample ID counter
-  sample_counter <- sample_counter + n.pts_per_polygon
+  return(test_sf)
 }
 
-# Convert the test tibble to an sf object
-test_sf <- st_as_sf(test, wkt = "geometry", crs=4326)
+n_pts_per_polygon <- num_sample_points(para)
 
+test_sf <- sample_points_from_polygons(para, n_pts_per_polygon = n_pts_per_polygon)
+```
+
+```{r}
+# Plot the sample points
 leaflet() %>%
   addProviderTiles('Esri.WorldImagery') %>%
   addCircleMarkers(data = test_sf, 
@@ -122,101 +107,22 @@ leaflet() %>%
                    fillOpacity = 0.75,
                    weight = 1,
                    radius = 5) %>%
-  addPolygons(data = top_10_para,
+  addPolygons(data = para,
               color = 'white',
               weight = 3) %>%
   addScaleBar(options = scaleBarOptions(imperial = FALSE))
 ```
 
 ```{r}
-# Create a vector specifying the number of points to be sampled from each polygon
-n_pts_per_polygon <- rep(1, times=10)# Example vector, replace with your desired values
-
-# Initialize the tibble with the appropriate size
-test <- tibble(geometry = vector("list", sum(n_pts_per_polygon)),
-               sample_id = character(sum(n_pts_per_polygon)))
-
-# Initialize the sample ID counter
-sample_counter <- 1
-
-# Loop through each region to sample points
-for (i in 1:10) {
-  # Sample points from the i-th polygon
-  pts <- st_sample(x = top_10_para[i, ], size = n_pts_per_polygon[i])
-  
-  # Convert the sampled points to their WKT representation
-  point_wkt <- st_as_text(pts)
-  
-  # Determine the indices to store the sampled points
-  start_index <- sample_counter
-  end_index <- sample_counter + n_pts_per_polygon[i] - 1
-  
-  # Store the WKT representation of the sampled point geometries and sample IDs in the test tibble
-  test$geometry[start_index:end_index] <- point_wkt
-  test$sample_id[start_index:end_index] <- paste0('S_', start_index:end_index)
-        
-  # Increment the sample ID counter
-  sample_counter <- end_index + 1
-}
-
-test_sf <- st_as_sf(test, wkt = "geometry", crs=4326)
-```
-
-Gets all pixel centers for all regions (will take too long, don't use, 1 million points)
-
-```{r}
-all_pixel_lists <- list()
-
-for (i in 1){
-  poly <- top_10_para$geometry[i]
-  if (st_geometry_type(poly) == "MULTIPOLYGON"){
-    polys <- st_cast(poly, "POLYGON")
-    for (j in 1:length(polys)){
-      paracrop_poly <- st_sfc(polys[j], crs = 4326) %>% st_sf()
-      pixel_list_test_poly <- lsat_get_pixel_centers(paracrop_poly, plot_map=FALSE, pixel_prefix="S", lsat_WRS2_scene_bounds = "/Users/annamakarewicz/Desktop/cs/snrproj/WRS-2_bound_world_0.kml")
-    
-      all_pixel_lists[[i]] <- pixel_list_test_poly
-    }
-  }
-  else{
-    paracrop_poly <- st_sfc(poly, crs = 4326) %>% st_sf()
-    pixel_list_test_poly <- lsat_get_pixel_centers(paracrop_poly, plot_map=FALSE, pixel_prefix="S", lsat_WRS2_scene_bounds = "/Users/annamakarewicz/Desktop/cs/snrproj/WRS-2_bound_world_0.kml")
-    
-    all_pixel_lists[[i]] <- pixel_list_test_poly
-  }
-  print(i)
-}
-
-pixels <- bind_rows(all_pixel_lists)
-
-generate_strings <- function(n) {
-  # Generate a sequence from 1 to n and paste "S_" before each element
-  strings <- paste("S_", 1:n, sep = "")
-  return(strings)
-}
-
-# Example usage
-n <- nrow(pixels)  # Length of the sequence
-strings <- generate_strings(n)
-
-pixels$sample_id <- strings
-```
-
-```{r}
-task_list <- lsat_export_ts(pixels, start_doy=1, end_doy=365)
-```
-
-```{r}
+# Export the picel measurments to google drive
 task_list <- lsat_export_ts(test_sf, start_doy=1, end_doy=365)
 ```
 
 ```{r}
 # Create a vector of file names
-file_names <- paste0("lsatTS_export_chunk_", 1, ".csv")
+file_names <- paste0("lsatTS_export_chunk_", 1:37, ".csv")
 
-setwd("/Users/annamakarewicz/Desktop/cs/snrproj")
-
-# Read multiple data files specified in file_names using fread, then combine these data tables into a single data table (lsat.dt) by row-binding them together. The resulting data table lsat.dt will contain all the rows from the files read.
+# Read each file and row-bind them together
 lsat.dt <- do.call("rbind", lapply(file_names, fread))
 ```
 
@@ -239,59 +145,63 @@ lsat.dt <- lsat_calc_spectral_index(lsat.dt, si = 'evi')
 
 # Cross-calibrate NDVI among sensors using an approach based on Random Forest machine learning
 # Note: Need lots of observations for this to work
-#lsat.dt <- lsat_calibrate_rf(lsat.dt, 
- #                            band.or.si = 'evi', 
-  #                           doy.rng = 1:365, 
-   #                          min.obs = 5, 
-    #                         frac.train = 0.75, 
-     #                        overwrite.col = T, 
-      #                       write.output = F)
+lsat.dt <- lsat_calibrate_rf(lsat.dt, 
+                             band.or.si = 'evi', 
+                             doy.rng = 1:365, 
+                             min.obs = 5, 
+                             frac.train = 0.75, 
+                             overwrite.col = T, 
+                             write.output = F)
 ```
 
-# `{r} # # Function to extract sample points that came from the same polygon, will be used to help fit the mean evi values of a polygon rather than individual sample points. Will need to be updated, works for when there are 10 points sampled from each polygon 
 ```{r}
-extract_group <- function(sample_id) { 
-  group_number <- as.numeric(sub("S_", "", sample_id)) 
-  higher_order_group <- ((group_number - 1) %/% 20) + 1 
-  return(higher_order_group) } 
-```
-
-lsat.dt <- lsat.dt[!is.na(lsat.dt$n_pts_per_polygon), ] # for (i in 1:nrow(lsat.dt)) { #   print(paste("Processing row", i)) #   range <- c(1, lsat.dt$n_pts_per_polygon[i]) #    #   if (!is.na(range[2])) { #     print(paste("range[1]:", range[1])) #     print(paste("range[2]:", range[2])) #     sample_ids <- range[1]:range[2] #     print(paste("sample_ids:", sample_ids)) #      #     # Add your processing logic here using sample_ids #   } else { #     print("Skipping row due to NA value in n_pts_per_polygon") #   } # } #  # extract_group <- function(sample_id, group_lengths) { #   group_numbers <- as.numeric(sub("S_", "", sample_id)) #   cumulative_lengths <- c(0, cumsum(group_lengths)) #   higher_order_group <- rep(NA, length(sample_id)) #   for (i in 1:length(cumulative_lengths)) { #     if (i == 1) { #       higher_order_group[group_numbers <= cumulative_lengths[i]] <- i #     } else { #       higher_order_group[group_numbers > cumulative_lengths[i - 1] & group_numbers <= cumulative_lengths[i]] <- i #     } #   } #   return(higher_order_group) # } 
-
-```{r}
-means <- lsat.dt %>%
-  mutate(group.id = extract_group(sample.id)) 
-
-means$group.id <- means$group.id - 1
-
-grouped_means <- means %>%
-  group_by(doy, year, group.id) %>% 
-    summarize(evi = mean(evi)) 
+# Function to assign the group (essentially plantation) to each of the sample points
+extract_group <- function(sample_id, group_lengths) {
     
-grouped_means <- filter(grouped_means, year >= 2010) #  # source("/Users/annamakarewicz/Desktop/cs/snrproj/Updated_curve_fit (mean, no points).R") # # Fit phenological models (cubic splines) to each time series (Took out vi.min arg) # #lsat.pheno.dt <- updated_curve_fit_mean(grouped_means, si = 'evi', spar = .6)`
+    group_numbers <- as.numeric(sub("S_", "", sample_id))
+    cumulative_lengths <- c(0, cumsum(group_lengths))
+    higher_order_group <- rep(NA, length(sample_id))
+    
+    for (i in 1:length(cumulative_lengths)) {
+        if (i == 1) {
+            higher_order_group[group_numbers <= cumulative_lengths[i]] <- i
+        } else {
+            higher_order_group[group_numbers > cumulative_lengths[i - 1] & group_numbers <= cumulative_lengths[i]] <- i
+        }
+    }
+    
+    return(higher_order_group)
+}
 
-# lsat.dt <- filter(lsat.dt, year >= 2010)
+# Define the function to process the groups and calculate mean EVI values
+calculate_grouped_means <- function(lsat_dt, n_pts_per_polygon) {
+  # Assign the group IDs
+  groups <- lsat_dt %>%
+    mutate(group.id = extract_group(sample.id, n_pts_per_polygon))
+  
+  # Fix the magnitude of the group ID being off by one
+  groups$group.id <- groups$group.id - 1
+  
+  # Find the mean EVI value for each group, day, and year combo
+  grouped_means <- groups %>%
+    group_by(doy, year, group.id) %>%
+    summarize(evi = mean(evi, na.rm = TRUE), .groups = 'drop')
+  
+  return(grouped_means)
+}
 
-source("/Users/annamakarewicz/Desktop/cs/snrproj/Updated_curve_function (no points).R")
-# Fit phenological models (cubic splines) to each time series (Took out vi.min arg)
+grouped_means <- calculate_grouped_means(lsat.dt, n_pts_per_polygon)
+
+# Fit phenological models (cubic splines) to each plantation
+lsat.pheno.dt <- updated_curve_fit_mean(grouped_means, si = 'evi', spar = .6, window.yrs = 3)
+```
+
+```{r}
+# This fit is done for every pixel sampled instead of at the plantation level like the above
 lsat.pheno.dt <- fit_phenological_curve_no_points(lsat.dt, si = 'evi', spar = .6)
 
 # Gives some summary stats on the phenological curve fits
 lsat.gs.dt <- lsat_summarize_growing_seasons(lsat.pheno.dt, si = 'evi', min.frac.of.max = 0.75)
-
-# Combine year and day of year into a continuous time variable
-lsat.pheno.dt$continuous_time <- lsat.pheno.dt$year + (lsat.pheno.dt$doy / 365)
-
-# Plot EVI as a function of continuous time (year + fraction of year)
-ggplot(lsat.pheno.dt, aes(x = continuous_time, y = evi)) +
-  geom_line() +
-  labs(title = "EVI from 1990 to 2020",
-       x = "Year",
-       y = "Landsat EVI",
-       color = "Sample ID") +
-  theme_minimal() +
-  facet_wrap(~ as.factor(sample.id), scales = "free_y", nrow = 2) +
-  theme(legend.position = "right")
 ```
 
 ```{r}
@@ -333,73 +243,35 @@ leaflet() %>%
   addLegend('bottomright',
             colors=colors.dt$trend.color,
             labels=colors.dt$trend.cat,
-            title='NDVImax trend',
+            title='EVImax trend',
             opacity=1)
 ```
 
-This creates a dataframe that contains each of the plantations and the year that the minimum evi value was observed
-
 ```{r}
-min_evi_plantation <- grouped_means %>%
-    dplyr::filter(evi == min(evi)) %>%
-    dplyr::select(group.id, min_evi = evi, year)
+# Define the function to find the minimum EVI spline fit for each plantation
+find_min_evi <- function(data) {
+  data %>%
+    group_by(group.id) %>%
+    filter(spl.fit == min(spl.fit)) %>%
+    filter(year == min(year)) %>%
+    select(group.id, min_evi = spl.fit, year) %>%
+    distinct(group.id, .keep_all = TRUE)
+}
 
-min_evi_plantation <- min_evi_plantation %>%
-  group_by(group.id) %>%
-  filter(year == min(year)) %>%
-  ungroup() %>%
-  dplyr::select(group.id, min_evi, year)
-
-
-```
-
-This creates a dataframe that contains each of the sample points and the year that he minimum evi value was observed.
-
-```{r}
-min_evi_sample <- means %>%
-  group_by(sample.id) %>%
-  slice(which.min(evi)) %>%
-  ungroup() %>%
-  rename(min_evi = evi) %>%
-  dplyr::select(sample.id, min_evi, year)
-```
-
-The following code tracks and plots the minimum evi year for each plantation based on the fitted curves and plots a choropleth map based on the year values
-
-```{r}
-test <- lsat.pheno.dt %>%
-    group_by(sample.id) %>%
-    dplyr::filter(spl.fit == min(spl.fit)) %>%
-    ungroup() %>%
-  rename(min_evi = spl.fit) %>%
-  dplyr::select(sample.id, min_evi, year)
-
-test <- test %>% 
-  group_by(sample.id) %>% 
-  dplyr::filter(year == min(year)) %>% 
-  dplyr::select(sample.id, min_evi, year) %>% 
-  distinct(sample.id, .keep_all = TRUE)
+# Use the function on your dataset
+min_evi <- find_min_evi(lsat.pheno.dt)
 ```
 
 ```{r}
-top_10_para$group.id <- 1:nrow(top_10_para)
+# Assign a group.id to the original dataframe
+para$group.id <- 1:nrow(para)
 
-joined <- test %>%
-  mutate(group.id = as.integer(sample.id)) %>%
-  left_join(top_10_para, by = "group.id")
+# Join min_evi and para by group.id
+joined <- min_evi %>% 
+  left_join(para, by = "group.id")
 
+# COnvert to a dataframe
 joined <- as.data.frame(joined)
-
-# Ensure that 'year' is numeric
-joined$year <- as.numeric(joined$year)
-
-# Handle any potential NA values in the 'year' column
-joined <- joined %>%
-  filter(!is.na(year))
-
-# Normalize the year values between 0 and 1
-joined <- joined %>% 
-  mutate(norm_year = (year - min(year)) / (max(year) - min(year)))
 
 # Convert your dataframe to a spatial object
 sf_joined <- st_as_sf(joined)
@@ -410,20 +282,153 @@ color_palette <- colorNumeric(
   domain = 1984:2024
 )
 
-sf_joined <- st_cast(sf_joined, "MULTIPOLYGON")
-
 # Create leaflet map with legend
 map <- leaflet(sf_joined) %>%
   addProviderTiles("CartoDB.Positron") %>%
-  setView(lng = -75, lat = -8.6, zoom = 8.2) %>%
+  setView(lng = -48, lat = -1.6, zoom = 8.2) %>%
   addPolygons(data = sf_joined, fillColor = ~color_palette(year), 
-              color = "grey", weight = 1, opacity = 1, fillOpacity = 0.7) %>%
+              color = "grey", weight = 1, opacity = 1, fillOpacity = 0.7,
+              label = ~as.character(year)) %>%
   addLegend(position = "bottomright", 
             pal = color_palette, 
             values = ~year,
             title = "Year",
             opacity = 0.7,
-            labFormat = labelFormat(suffix = "", digits = 0, big.mark = ""))
+            labFormat = labelFormat(suffix = "", digits = 0, big.mark = "")) %>% 
+    addScaleBar(options = scaleBarOptions(imperial = FALSE))
             
 map
+```
+
+```{r}
+ggplot(joined, aes(x = year)) +
+  geom_density(alpha = 0.5, fill = "skyblue") +
+  labs(title = "Predicted Deforestation Year density Plot", x = "Deforestation Year", y = "Density") +
+  theme_bw()
+```
+
+```{r}
+# Initialize a new_year column
+joined$new_year <- NA
+
+# Bin the years based on their value
+for (i in 1:nrow(joined)){
+  
+  if (joined$year[i] >= 1984 & joined$year[i] <= 1993){
+    joined$new_year[i] = "1984-1993"
+  }
+  
+  else if (joined$year[i] >= 1994 & joined$year[i] <= 2003){
+    joined$new_year[i] = "1994-2003"
+  }
+  
+  else if (joined$year[i] >= 2004 & joined$year[i] <= 2013){
+    joined$new_year[i] = "2004-2013"
+  }
+  
+  else if (joined$year[i] >= 2014){
+    joined$new_year[i] = "2014+"
+  }
+}
+
+# Calculate the count of rows for each unique year
+year_counts <- joined %>%
+  group_by(new_year) %>%
+  summarize(row_count = n())
+
+# Calculate the proportion of rows for each unique year
+year_proportions <- year_counts %>%
+  mutate(proportion = row_count / nrow(joined))
+
+year_proportions
+```
+
+```{r}
+translate_to_english <- function(portuguese_vector) {
+    # English translations of the Portuguese words
+    translations <- c("URBANO" = "Urban",
+                      "DENDÊ" = "Palm Oil",
+                      "FLORESTA_MADURA" = "Mature Forest",
+                      "CACAU" = "Cocoa",
+                      "VEGETAÇÃO_SECUNDÁRIA" = "Secondary Vegetation",
+                      "PASTAGEM" = "Pasture",
+                      "SILVICULTURA" = "Silviculture",
+                      "AGRICULTURA_ANUAL" = "Annual Agriculture",
+                      "CITRUS" = "Citrus",
+                      "COCO" = "Coconut",
+                      "AÇAÍ" = "Açaí",
+                      "VIVEIRO_DE_MUDAS_DE_DENDÊ" = "Palm Seedling Nursery",
+                      "FLORESTA_PRIMÁRIA" = "Primary Forest",
+                      "PIMENTA_REINO" = "Black Pepper",
+                      "SAF" = "Agroforestry System",
+                      "PASTO_LIMPO" = "Clean Pasture",
+                      "MAMÃO" = "Papaya",
+                      "PASTO_SUJO" = "Dirty Pasture",
+                      "MACAXEIRA" = "Cassava",
+                      "CAFÉ" = "Coffee")
+
+    # Translate the Portuguese words to English
+    english_vector <- translations[portuguese_vector]
+    
+    return(english_vector)
+}
+
+para$crops <- sapply(strsplit(para$COBERTURA, "\\+"), function(x) x[1])
+
+para$crops <- translate_to_english(para$crops)
+
+crop <- joined %>% 
+  left_join(para, by = "group.id")
+
+crop_table <- as.data.frame(table(crop$crops))
+
+crop <- crop %>% 
+  filter(crops == "Açaí" | crops == "Palm Oil" | crops == "Cocoa")
+```
+
+```{r}
+# Create the overlaid histograms
+ggplot(crop, aes(x = year, fill = factor(crops))) +
+  geom_density(alpha = 0.5) +
+  labs(x = "Deforestation Year", y = "Density") +
+  scale_fill_discrete(name = "Crop Type") +
+  theme_bw()
+
+```
+
+```{r}
+palm <- crop %>% 
+  filter(crops == "Palm Oil")
+
+ggplot(palm, aes(x = year, fill = factor(crops))) +
+  geom_density(alpha = 0.5) +
+  labs(x = "Deforestation Year", y = "Density") +
+  scale_fill_manual(name = "Crop Type", values = c("Palm Oil" = "skyblue")) +
+  ylim(0, 0.06) +
+  theme_bw()
+
+```
+
+```{r}
+cocoa <- crop %>% 
+  filter(crops == "Cocoa")
+
+ggplot(cocoa, aes(x = year, fill = factor(crops))) +
+  geom_density(alpha = 0.5) +
+  labs(x = "Deforestation Year", y = "Density") +
+  scale_fill_manual(name = "Crop Type", values = c("Cocoa" = "skyblue")) +
+  ylim(0, 0.06) +
+  theme_bw()
+```
+
+```{r}
+acai <- crop %>% 
+  filter(crops == "Açaí")
+
+ggplot(acai, aes(x = year, fill = factor(crops))) +
+  geom_density(alpha = 0.5) +
+  labs(x = "Deforestation Year", y = "Density") +
+  scale_fill_manual(name = "Crop Type", values = c("Açaí" = "skyblue")) +
+  ylim(0, 0.06) +
+  theme_bw()
 ```
