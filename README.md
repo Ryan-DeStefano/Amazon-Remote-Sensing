@@ -1,9 +1,9 @@
 # Amazon-Remote-Sensing
-Project focused on tracking greenness trends of of plantations within the amazon rainforest aiming to find signals of deforestation.
+Project focused on tracking greenness trends of of plantations within the amazon rainforest aiming to find signals of deforestation and ultimately predict deforestation year.
 
 **LandsatTS Walkthrough Folder:**
 
-Contains code walking through the usage of the R package, "LandsatTS". Follows directly the steps laid out in https://github.com/logan-berner/LandsatTS?tab=readme-ov-file#4-quantify-growing-season-characteristics
+Contains code walking through the usage of the R package, "LandsatTS". This package is the basis of the research and is being changed/adapted to the rainforest setting. Follows directly the steps laid out in https://github.com/logan-berner/LandsatTS?tab=readme-ov-file#4-quantify-growing-season-characteristics
 
 **Brazil Folder:**
 
