@@ -3,13 +3,16 @@ Project focused on tracking greenness trends of of plantations within the amazon
 (Will insert the link to the research paper later).
 
 
+
 **LandsatTS Walkthrough Folder:**
 
 Contains code walking through the usage of the R package, "LandsatTS". This package is the basis of the research and is being changed/adapted to the rainforest setting. Follows directly the steps laid out in https://github.com/logan-berner/LandsatTS?tab=readme-ov-file#4-quantify-growing-season-characteristics
 
+
 **Helper FUnction Folder:**
 
 Contains all helper functions used in the analysis files
+
 
 **Brazil Folder:**
 
@@ -23,6 +26,7 @@ The Plotting Plantations file contains simple code to plot and take some sample 
 
 Shapefiles for the plantations of interest are also included.
 
+
 **Peru Folder:**
 
 Contains the "Landsat Application", "ALOS Application", and "Plotting Plantations" R files. 
@@ -34,6 +38,7 @@ The ALOS Application file does the same as the Landsat Application file but for 
 The Plotting Plantations file contains simple code to plot and take some sample points from the plantations of interest.
 
 Shapefiles for the plantations of interest are also included.
+
 
 **ALOS Folder:**
 
