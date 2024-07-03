@@ -39,12 +39,17 @@ leaflet() %>%
 ```
 
 ```{r}
+# Sort the dataframe of plantations by area descending and calculate the estimated
+# number of points per polygon. The constant, .00000006 was found by trial and error
+# could be different for other use cases.
 para <- paracrop %>% 
   arrange(desc(Shape_Area)) %>% 
   mutate(estimated_points = Shape_Area / 0.00000006)
 
+# Calculate the number of points to sample from each polygon
 n_pts_per_polygon <- num_sample_points(para)
 
+# Sample the points from each polygon and save them as a spatial object
 test_sf <- sample_points_from_polygons(para, n_pts_per_polygon = n_pts_per_polygon)
 ```
 
@@ -72,6 +77,7 @@ task_list <- lsat_export_ts(test_sf, start_doy=1, end_doy=365)
 
 ```{r}
 # Create a vector of file names
+# Will be different depending on what the name of the files are
 file_names <- paste0("lsatTS_export_chunk_", 1:37, ".csv")
 
 # Read each file and row-bind them together
@@ -87,6 +93,7 @@ lsat.dt <- lsat_clean_data(lsat.dt, geom.max = 15, cloud.max = 80, sza.max = 60,
 ```
 
 ```{r}
+# Generate general summary statistics of the sample points
 data.summary.dt <- lsat_summarize_data(lsat.dt)
 data.summary.dt
 ```
@@ -107,6 +114,7 @@ lsat.dt <- lsat_calibrate_rf(lsat.dt,
 ```
 
 ```{r}
+# Calculate the mean EVI values foreach plantation for each point in time
 grouped_means <- calculate_grouped_means(lsat.dt, n_pts_per_polygon)
 
 # Fit phenological models (cubic splines) to each plantation
@@ -133,39 +141,45 @@ lsat_plot_trend_hist(lsat.trnds.dt, xlim=c(-21,21))
 ```
 
 ```{r}
-# Create leaflet plot with trends imposed
-colors.dt <- data.table(trend.cat=c("greening","no_trend","browning"),
-                        trend.color=c("springgreen","white","orange"))
+# Create a data table mapping trend categories to their corresponding colors
+colors.dt <- data.table(trend.cat = c("greening", "no_trend", "browning"),
+                        trend.color = c("springgreen", "white", "orange"))
 
-lsat.trnds.dt <- lsat.trnds.dt[colors.dt, on='trend.cat']
+# Merge the colors data table with the lsat.trnds.dt data table based on the trend.cat column
+lsat.trnds.dt <- lsat.trnds.dt[colors.dt, on = 'trend.cat']
 
+# Remove rows with any NA values from the merged data table
 lsat.trnds.dt <- na.omit(lsat.trnds.dt)
 
+# Convert the cleaned data table to an sf object (spatial features)
 lsat.trnds.sf <- st_as_sf(lsat.trnds.dt,
-                          coords=c("longitude", "latitude"),
-                          crs=4326)
+                          coords = c("longitude", "latitude"),
+                          crs = 4326)
 
+# Create a leaflet map
 leaflet() %>%
-  addProviderTiles('Esri.WorldImagery') %>%
-  addPolygons(data = top_10_para,
-              color = 'white',
-              weight = 3) %>%
-  addCircleMarkers(data=lsat.trnds.sf,
-                   color='white',
-                   weight=1,
-                   opacity=0.9,
-                   fillColor=~trend.color,
-                   fillOpacity=0.5,
-                   radius=~sqrt(abs(total.change.pcnt))*1) %>%
-  addLegend('bottomright',
-            colors=colors.dt$trend.color,
-            labels=colors.dt$trend.cat,
-            title='EVImax trend',
-            opacity=1)
+  addProviderTiles('Esri.WorldImagery') %>%  # Add Esri World Imagery tiles as the base map
+  addPolygons(data = top_10_para,            # Add polygons for the top 10 regions
+              color = 'white',               # Set the polygon border color to white
+              weight = 3) %>%                # Set the polygon border weight
+  addCircleMarkers(data = lsat.trnds.sf,     # Add circle markers for the trends data
+                   color = 'white',          # Set the marker border color to white
+                   weight = 1,               # Set the marker border weight
+                   opacity = 0.9,            # Set the marker border opacity
+                   fillColor = ~trend.color, # Fill markers with colors based on trend categories
+                   fillOpacity = 0.5,        # Set the marker fill opacity
+                   radius = ~sqrt(abs(total.change.pcnt)) * 1) %>%  # Set marker radius based on the total change percentage
+  addLegend('bottomright',                   # Add a legend at the bottom right of the map
+            colors = colors.dt$trend.color,  # Set legend colors to match trend colors
+            labels = colors.dt$trend.cat,    # Set legend labels to match trend categories
+            title = 'EVImax trend',          # Set the legend title
+            opacity = 1)                     # Set the legend opacity
 ```
 
 ```{r}
-# Use the function on your dataset
+# Find the point in time in which the minimum EVI value occurs for each plantation
+# Saves the info in a dataframe which has each plantation with the year and value of EVI '
+# in which the minimum was found
 min_evi <- find_min_evi(lsat.pheno.dt)
 ```
 
@@ -177,7 +191,7 @@ para$group.id <- 1:nrow(para)
 joined <- min_evi %>% 
   left_join(para, by = "group.id")
 
-# COnvert to a dataframe
+# Convert to a dataframe
 joined <- as.data.frame(joined)
 
 # Convert your dataframe to a spatial object
@@ -208,6 +222,7 @@ map
 ```
 
 ```{r}
+# Create a density plot of the predicted deforestation years for all plantations
 ggplot(joined, aes(x = year)) +
   geom_density(alpha = 0.5, fill = "skyblue") +
   labs(title = "Predicted Deforestation Year density Plot", x = "Deforestation Year", y = "Density") +
@@ -251,6 +266,7 @@ year_proportions
 ```
 
 ```{r}
+# Function to translate the Portugese to English
 translate_to_english <- function(portuguese_vector) {
     # English translations of the Portuguese words
     translations <- c("URBANO" = "Urban",
@@ -280,15 +296,20 @@ translate_to_english <- function(portuguese_vector) {
     return(english_vector)
 }
 
+# Split the strings by +
 para$crops <- sapply(strsplit(para$COBERTURA, "\\+"), function(x) x[1])
 
+# Apply the function
 para$crops <- translate_to_english(para$crops)
 
+# Join the vegetation types to the joined dataset
 crop <- joined %>% 
   left_join(para, by = "group.id")
 
+# Save the object as a dataframe
 crop_table <- as.data.frame(table(crop$crops))
 
+# Filter to only rows in which the crops are Acai, palm oil, or cocoa
 crop <- crop %>% 
   filter(crops == "Açaí" | crops == "Palm Oil" | crops == "Cocoa")
 ```
@@ -304,9 +325,11 @@ ggplot(crop, aes(x = year, fill = factor(crops))) +
 ```
 
 ```{r}
+# Filter to only palm oil
 palm <- crop %>% 
   filter(crops == "Palm Oil")
 
+# Create density plot of predicted years
 ggplot(palm, aes(x = year, fill = factor(crops))) +
   geom_density(alpha = 0.5) +
   labs(x = "Deforestation Year", y = "Density") +
@@ -317,9 +340,11 @@ ggplot(palm, aes(x = year, fill = factor(crops))) +
 ```
 
 ```{r}
+# Filter to only cocoa
 cocoa <- crop %>% 
   filter(crops == "Cocoa")
 
+# Create desnity plot of predicted years
 ggplot(cocoa, aes(x = year, fill = factor(crops))) +
   geom_density(alpha = 0.5) +
   labs(x = "Deforestation Year", y = "Density") +
@@ -329,9 +354,11 @@ ggplot(cocoa, aes(x = year, fill = factor(crops))) +
 ```
 
 ```{r}
+# Filter to only acai
 acai <- crop %>% 
   filter(crops == "Açaí")
 
+# Create density plot of predicted years
 ggplot(acai, aes(x = year, fill = factor(crops))) +
   geom_density(alpha = 0.5) +
   labs(x = "Deforestation Year", y = "Density") +
