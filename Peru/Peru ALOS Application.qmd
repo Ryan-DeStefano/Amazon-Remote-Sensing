@@ -1,3 +1,17 @@
+---
+title: "Peru AOI ALOS Application"
+author: "Ryan DeStefano"
+format: 
+  html:
+    code-fold: true
+    code-line-numbers: true
+    code-tools: true
+    self-contained: true
+editor: source
+execute: 
+  cache: true
+---
+
 ```{r}
 #| message: false
 library(sf)
@@ -45,7 +59,7 @@ alos <- joined %>%
 # Pull the vector of group.ids
 group.id_vector <- alos$group.id
 
-means <- combined_function(joined, ALOS.df, group.id_vector)
+means <- alos_calculate_grouped_means(joined, ALOS.df, group.id_vector)
 ```
 
 ```{r}

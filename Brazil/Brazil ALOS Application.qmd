@@ -1,3 +1,17 @@
+---
+title: "Brazil AOI ALOS Application"
+author: "Ryan DeStefano"
+format: 
+  html:
+    code-fold: true
+    code-line-numbers: true
+    code-tools: true
+    self-contained: true
+editor: source
+execute: 
+  cache: true
+---
+
 ```{r}
 #| message: false
 library(sf)
@@ -39,46 +53,6 @@ ALOS.df <- ALOS.df %>%
 ```
 
 ```{r}
-combined_function <- function(joined_df, ALOS_df, group_ids) {
-  extract_group <- function(sample_id, group_ids) {
-    group_number <- as.numeric(sub("S_", "", sample_id))
-    group_index <- ((group_number - 1) %/% 30) %% length(group_ids) + 1
-    return(group_ids[group_index])
-  }
-  
-  # Filter for the years 2015 or later
-  alos <- joined_df %>% 
-    filter(year >= 2015)
-  
-  # Pull the vector of group.ids
-  group_id_vector <- alos$group.id
-  
-  # Assign the group.ids
-  ALOS_df <- ALOS_df %>%
-    mutate(group.id = extract_group(sample_id, group_id_vector)) %>% 
-    filter(!is.na(ratio))
-  
-  # Find mean ratio value for each year, month, group.id combo
-  means <- ALOS_df %>%
-    group_by(year, month, group.id) %>%
-    summarize(ratio = mean(ratio))
-  
-  # Count the number of means there are per group.id, how many observations per plantation
-  group_counts <- means %>%
-    group_by(group.id) %>%
-    summarize(count = n())
-  
-  # Filter out groups with less than 20 rows
-  filtered_groups <- group_counts %>%
-    filter(count >= 20)
-  
-  # Filter the original dataframe based on the filtered groups
-  means <- means %>%
-    filter(group.id %in% unique(filtered_groups$group.id))
-  
-  return(means)
-}
-
 # Only interested in plantations/group.id where the predicted deforestation year from  Landsat was 2015 or later
 alos <- joined %>% 
   filter(year >= 2015)
@@ -86,7 +60,7 @@ alos <- joined %>%
 # Pull the vector of group.ids
 group.id_vector <- alos$group.id
 
-means <- combined_function(joined, ALOS.df, group.id_vector)
+means <- alos_calculate_grouped_means(joined, ALOS.df, group.id_vector)
 ```
 
 ```{r}

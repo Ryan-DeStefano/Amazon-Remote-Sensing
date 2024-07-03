@@ -27,23 +27,6 @@ library(ggplot2)
 ```
 
 ```{r}
-read_shapefile <- function(filepath, crs, make_valid = F) {
-  
-  # Read in the file
-  file <- st_read(filepath)
-
-  # Make it valid, gets rid of crossing polygon lines etc.
-  file <- st_make_valid(file)
-  
-  # Transform to WGS84 (EPSG:4326)
-  file <- st_transform(file, crs = crs)
-  
-  if (make_valid == T) {
-    file <- file[st_is_valid(file),]
-  }
-
-}
-
 # Read in the shapefile
 paracrop <- read_shapefile("C:/Users/Ryman/OneDrive/Documents/Thesis/ParaCropShapefiles (Master)/ParaCropShapefiles/ParaCropShapefiles.shp", 4326)
 
@@ -59,41 +42,6 @@ leaflet() %>%
 para <- paracrop %>% 
   arrange(desc(Shape_Area)) %>% 
   mutate(estimated_points = Shape_Area / 0.00000006)
-
-# Define the function to sample points from polygons and store in a tibble
-sample_points_from_polygons <- function(df, n_pts_per_polygon) {
-  # Create an empty tibble to store the sampled points
-  test <- tibble(geometry = vector("list", sum(n_pts_per_polygon)),
-                 sample_id = character(sum(n_pts_per_polygon)))
-
-  # Initialize the sample ID counter
-  sample_counter <- 1
-
-  # Loop through each region to sample points
-  for (i in 1:nrow(df)) {
-    # Sample points from the i-th polygon
-    pts <- st_sample(x = df[i, ], size = n_pts_per_polygon[i])
-    
-    # Convert the sampled points to their WKT representation
-    point_wkt <- st_as_text(pts)
-    
-    # Determine the indices to store the sampled points
-    start_index <- sample_counter
-    end_index <- sample_counter + n_pts_per_polygon[i] - 1
-    
-    # Store the WKT representation of the sampled point geometries and sample IDs in the test tibble
-    test$geometry[start_index:end_index] <- point_wkt
-    test$sample_id[start_index:end_index] <- paste0('S_', start_index:end_index)
-          
-    # Increment the sample ID counter
-    sample_counter <- end_index + 1
-  }
-
-  # Convert the test tibble to an sf object
-  test_sf <- st_as_sf(test, wkt = "geometry", crs = 4326)
-  
-  return(test_sf)
-}
 
 n_pts_per_polygon <- num_sample_points(para)
 
@@ -159,41 +107,6 @@ lsat.dt <- lsat_calibrate_rf(lsat.dt,
 ```
 
 ```{r}
-# Function to assign the group (essentially plantation) to each of the sample points
-extract_group <- function(sample_id, group_lengths) {
-    
-    group_numbers <- as.numeric(sub("S_", "", sample_id))
-    cumulative_lengths <- c(0, cumsum(group_lengths))
-    higher_order_group <- rep(NA, length(sample_id))
-    
-    for (i in 1:length(cumulative_lengths)) {
-        if (i == 1) {
-            higher_order_group[group_numbers <= cumulative_lengths[i]] <- i
-        } else {
-            higher_order_group[group_numbers > cumulative_lengths[i - 1] & group_numbers <= cumulative_lengths[i]] <- i
-        }
-    }
-    
-    return(higher_order_group)
-}
-
-# Define the function to process the groups and calculate mean EVI values
-calculate_grouped_means <- function(lsat_dt, n_pts_per_polygon) {
-  # Assign the group IDs
-  groups <- lsat_dt %>%
-    mutate(group.id = extract_group(sample.id, n_pts_per_polygon))
-  
-  # Fix the magnitude of the group ID being off by one
-  groups$group.id <- groups$group.id - 1
-  
-  # Find the mean EVI value for each group, day, and year combo
-  grouped_means <- groups %>%
-    group_by(doy, year, group.id) %>%
-    summarize(evi = mean(evi, na.rm = TRUE), .groups = 'drop')
-  
-  return(grouped_means)
-}
-
 grouped_means <- calculate_grouped_means(lsat.dt, n_pts_per_polygon)
 
 # Fit phenological models (cubic splines) to each plantation
@@ -202,7 +115,7 @@ lsat.pheno.dt <- updated_curve_fit_mean(grouped_means, si = 'evi', spar = .6, wi
 
 ```{r}
 # This fit is done for every pixel sampled instead of at the plantation level like the above
-lsat.pheno.dt <- fit_phenological_curve_no_points(lsat.dt, si = 'evi', spar = .6)
+lsat.pheno.dt <- updated_curve_fit_no_points(lsat.dt, si = 'evi', spar = .6)
 
 # Gives some summary stats on the phenological curve fits
 lsat.gs.dt <- lsat_summarize_growing_seasons(lsat.pheno.dt, si = 'evi', min.frac.of.max = 0.75)
@@ -252,16 +165,6 @@ leaflet() %>%
 ```
 
 ```{r}
-# Define the function to find the minimum EVI spline fit for each plantation
-find_min_evi <- function(data) {
-  data %>%
-    group_by(group.id) %>%
-    filter(spl.fit == min(spl.fit)) %>%
-    filter(year == min(year)) %>%
-    select(group.id, min_evi = spl.fit, year) %>%
-    distinct(group.id, .keep_all = TRUE)
-}
-
 # Use the function on your dataset
 min_evi <- find_min_evi(lsat.pheno.dt)
 ```

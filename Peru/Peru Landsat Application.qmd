@@ -144,7 +144,7 @@ lsat.pheno.dt <- updated_curve_fit_mean(grouped_means, si = 'evi', spar = .6, wi
 
 ```{r}
 # Fit phenological models (cubic splines) to each time series (Took out vi.min arg) for individual sample points instead of plantations
-lsat.pheno.dt <- fit_phenological_curve_no_points(lsat.dt, si = 'evi', spar = .6)
+lsat.pheno.dt <- updated_curve_fit_no_points(lsat.dt, si = 'evi', spar = .6)
 
 # Gives some summary stats on the phenological curve fits
 lsat.gs.dt <- lsat_summarize_growing_seasons(lsat.pheno.dt, si = 'evi', min.frac.of.max = 0.75)

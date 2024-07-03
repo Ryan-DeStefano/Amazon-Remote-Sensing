@@ -72,8 +72,6 @@ for (year in start_year:end_year) {
     # Optionally, you can save or process the task_list here
   }
 }
-
-## Stopped it after 2016-01-01 finsihed.
 ```
 
 ## Brazil Extraction
@@ -144,6 +142,4 @@ for (year in start_year:end_year) {
     # Optionally, you can save or process the task_list here
   }
 }
-
-## Stopped it after 2016-01-01 finsihed.
 ```
