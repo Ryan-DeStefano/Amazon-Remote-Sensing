@@ -38,13 +38,6 @@ ALOS.df <- ALOS.df %>%
 ```
 
 ```{r}
-# Function to attach a froup number to each of the rows based on sample.id
-extract_group <- function(sample_id, group_ids) {
-  group_number <- as.numeric(sub("S_", "", sample_id))
-  group_index <- ((group_number - 1) %/% 30) %% length(group_ids) + 1
-  return(group_ids[group_index])
-}
-
 # Only interested in plantations/group.id where the predicted deforestation year from  Landsat was 2015 or later
 alos <- joined %>% 
   filter(year >= 2015)
@@ -52,28 +45,7 @@ alos <- joined %>%
 # Pull the vector of group.ids
 group.id_vector <- alos$group.id
 
-# Assign the group.ids
-ALOS.df <- ALOS.df %>%
-  mutate(group.id = extract_group(sample_id, group.id_vector)) %>% 
-  filter(!is.na(ratio))
-
-# Find mean ratio value for each year, month, group.id combo
-means <- ALOS.df %>%
-  group_by(year, month, group.id) %>%
-  summarize(ratio = mean(ratio)) 
-
-# Count the number of means there are per group.id, how many obsevrations per plantation
-group_counts <- means %>%
-  group_by(group.id) %>%
-  summarize(count = n())
-
-# Filter out groups with less than 20 rows
-filtered_groups <- group_counts %>%
-  filter(count >= 20)
-
-# Filter the original dataframe based on the filtered groups
-means <- means %>%
-  filter(group.id %in% unique(filtered_groups$group.id))
+means <- combined_function(joined, ALOS.df, group.id_vector)
 ```
 
 ```{r}
@@ -106,78 +78,6 @@ for (id in random_group_ids) {
 ```
 
 ```{r}
-# FOr testing the spar value to use within the smooth.spline function
-result_table <- data.frame(spar = numeric(0),
-                           difference = numeric(0),
-                           proportion = numeric(0))
-
-spars <- c(.15,.16,.17,.18,.19,.2,.21,.22,.23,.24,.25)
-
-for (spar in spars) {
-  # Initialize a list to store the information for each group ID
-  max_spline_info <- list()
-  
-  # Loop through each group ID
-  for (id in unique(means$group.id)) {
-    # Filter data for the current group ID
-    gr <- means %>% 
-      filter(group.id == id)
-    
-    spar_value <- spar
-    
-    # Fit a spline to the data for the current group ID using smooth.spline
-    spline_fit <- stats::smooth.spline(gr$date, gr$ratio, spar = spar_value)
-    
-    # Extract fitted values from the spline fit
-    fitted_values <- spline_fit$y
-    
-    # Find the maximum fitted spline value and its corresponding year
-    max_spline_value <- max(fitted_values)
-    max_spline_year <- format(gr$date[which.max(fitted_values)], "%Y")
-    
-    # Store the information in the list
-    max_spline_info[[id]] <- list(group.id = id, max_spline_value = max_spline_value, max_spline_year = max_spline_year)
-  }
-  
-  # Convert the list to a dataframe
-  max_spline_df <- do.call(rbind, max_spline_info) %>% as.data.frame()
-  
-  # Convert the group.id column to a double
-  max_spline_df$group.id <- as.double(max_spline_df$group.id)
-  
-  # Join the alos datset to the max spline dataset
-  comparison <- max_spline_df %>% 
-    left_join(alos, by = "group.id") %>% 
-    mutate(difference = abs(as.integer(max_spline_year) - as.integer(year))) %>% 
-    select(group.id, max_spline_year, year, difference, geometry)
-  
-  # Calculate the table of counts for each difference value
-  difference_table <- table(comparison$difference)
-  
-  # Calculate the proportions for each difference value
-  proportion_table <- prop.table(difference_table)
-
-  if (nrow(proportion_table) == 10) {
-  # Combine the count and proportion tables into a single dataframe
-  new_iter <- data.frame(spar = rep(spar, times = 10),
-                         difference = as.numeric(names(difference_table)),
-                         proportion = round(as.numeric(proportion_table), 4))
-  
-  result_table <- rbind(result_table, new_iter)
-  }
-  
-  else {
-    # Combine the count and proportion tables into a single dataframe
-  new_iter <- data.frame(spar = rep(spar, times = 9),
-                         difference = as.numeric(names(difference_table)),
-                         proportion = round(as.numeric(proportion_table), 4))
-  
-  result_table <- rbind(result_table, new_iter)
-  }
-}
-```
-
-```{r}
 # Initialize a list to store the information for each group ID
 max_spline_info <- list()
 
@@ -191,7 +91,7 @@ for (id in unique(means$group.id)) {
   spline_fit <- stats::smooth.spline(gr$date, gr$ratio, spar = .17)
   
   # Extract fitted values from the spline fit
-  fitted_values <- spline_fit$y
+  fitted_values <- spline_fit$y 
   
   # Find the maximum fitted spline value and its corresponding year
   max_spline_value <- max(fitted_values)

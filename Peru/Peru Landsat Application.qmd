@@ -27,31 +27,16 @@ library(LandsatTS)
 ```
 
 ```{r}
-set.seed(27)
-
-# Read in the polygon shapefile
-main <- st_read(
-  "04 Dataset_Ucayali_Palm_V2.geojson")
-
-# Fix any possible line overlap
-main <- st_make_valid(main)
-
-# Check the current coordinate reference system
-st_crs(main)
-
-# Transform to WGS84 (EPSG:4326)
-main <- st_transform(main, crs = 4326)
+# Read in the shapefile
+peru <- read_shapefile("04 Dataset_Ucayali_Palm_V2.geojson", 4326, make_valid = T)
 ```
 
 ```{r}
-main <- main[st_is_valid(main),]
-```
+peru <- peru %>% 
+  mutate(Area = st_area(peru$geometry)) %>% 
+  arrange(desc(Area))
 
-```{r}
-# Rename the dataset
-peru <- main 
-
-# Initialize the vecotr of number of points to take from the brazil application
+# Initialize the vector of number of points to take from the brazil application
 provided_vector <- c(rep(20, 325), rep(19, 4), rep(18, 9), rep(17, 9), rep(16, 9), 
                      rep(15, 6), rep(14, 9), rep(13, 8), rep(12, 9), rep(11, 9), 
                      rep(10, 9), rep(9, 18), rep(8, 18), rep(7, 27), rep(6, 36), 
@@ -77,39 +62,18 @@ new_vector <- rev(new_vector)
 # Create a vector specifying the number of points to be sampled from each polygon
 n_pts_per_polygon <- new_vector  # Example vector, replace with your desired values
 
-# Initialize the tibble with the appropriate size
-test <- tibble(geometry = vector("list", sum(n_pts_per_polygon)),
-               sample_id = character(sum(n_pts_per_polygon)))
-
-# Initialize the sample ID counter
-sample_counter <- 1
-
-# Loop through each region to sample points
-for (i in 1:nrow(peru)) {
-  # Sample points from the i-th polygon
-  pts <- st_sample(x = peru[i, ], size = n_pts_per_polygon[i])
-  
-  # Convert the sampled points to their WKT representation
-  point_wkt <- st_as_text(pts)
-  
-  # Determine the indices to store the sampled points
-  start_index <- sample_counter
-  end_index <- sample_counter + n_pts_per_polygon[i] - 1
-  
-  # Store the WKT representation of the sampled point geometries and sample IDs in the test tibble
-  test$geometry[start_index:end_index] <- point_wkt
-  test$sample_id[start_index:end_index] <- paste0('S_', start_index:end_index)
-        
-  # Increment the sample ID counter
-  sample_counter <- end_index + 1
-}
-
-# Convert to a spatial object
-test_sf <- st_as_sf(test, wkt = "geometry", crs=4326)
+test_sf <- sample_points_from_polygons(peru, n_pts_per_polygon = n_pts_per_polygon)
 
 # Plot the polygons
 leaflet() %>%
   addProviderTiles('Esri.WorldImagery') %>%
+  addCircleMarkers(data = test_sf, 
+                   color = 'white',
+                   opacity = 0.9,
+                   fillColor = 'fuchsia',
+                   fillOpacity = 0.75,
+                   weight = 1,
+                   radius = 5) %>%
   addPolygons(data = peru,
               color = 'white',
               weight = 3) %>%
@@ -172,42 +136,13 @@ lsat.dt <- lsat_calibrate_rf(lsat.dt,
 ```
 
 ```{r}
-# Function to put sample points into groups based on the plantation theyw ere part of
-extract_group <- function(sample_id, group_lengths) {
-  group_numbers <- as.numeric(sub("S_", "", sample_id))
-  cumulative_lengths <- c(0, cumsum(group_lengths))
-  higher_order_group <- rep(NA, length(sample_id))
-  for (i in 1:length(cumulative_lengths)) {
-    if (i == 1) {
-      higher_order_group[group_numbers <= cumulative_lengths[i]] <- i
-    } else {
-      higher_order_group[group_numbers > cumulative_lengths[i - 1] & group_numbers <= cumulative_lengths[i]] <- i
-    }
-  }
-  return(higher_order_group)
-}
-
-# Assign the group.ids
-groups <- lsat.dt %>%
-  mutate(group.id = extract_group(sample.id, n_pts_per_polygon))
-
-# Fix the magnitude of the group.id being off by one
-groups$group.id <- groups$group.id - 1
-
-# Find the mean evi value for each of group, day, year combo
-grouped_means <- groups %>%
-  group_by(doy, year, group.id) %>%
-  summarize(evi = mean(evi))
-
-#bruh <- filter(grouped_means, group.id == 1036)
+grouped_means <- calculate_grouped_means(lsat.dt, n_pts_per_polygon)
 
 # Fit phenological models (cubic splines) to each time series (Took out vi.min arg)
 lsat.pheno.dt <- updated_curve_fit_mean(grouped_means, si = 'evi', spar = .6, window.yrs = 3)
 ```
 
 ```{r}
-bruh <- filter(lsat.dt, sample.id == "S_10")
-
 # Fit phenological models (cubic splines) to each time series (Took out vi.min arg) for individual sample points instead of plantations
 lsat.pheno.dt <- fit_phenological_curve_no_points(lsat.dt, si = 'evi', spar = .6)
 
@@ -257,24 +192,14 @@ leaflet() %>%
 ```
 
 ```{r}
-# Only keep the row with the minimum spline fit (predicted value) for each of the plantations (group.ids)
-min_evi <- lsat.pheno.dt %>%
-    group_by(group.id) %>%
-    filter(spl.fit == min(spl.fit)) %>%
-    select(group.id, min_evi = spl.fit, year)
-
-# Sometimes there ar emultiple spline fit minimums, keept the row that has the year furthest back
-min_evi <- min_evi %>% 
-  group_by(group.id) %>% 
-  filter(year == min(year)) %>% 
-  select(group.id, min_evi, year) %>% 
-  distinct(group.id, .keep_all = TRUE)
+# Use the function on your dataset
+min_evi <- find_min_evi(lsat.pheno.dt)
 ```
 
 ```{r}
 # Assign a group.id to the original dataframe
 peru$group.id <- 1:nrow(peru)
-
+ 
 # Join min_evi and peru by group.id
 joined <- min_evi %>% 
   left_join(peru, by = "group.id")
@@ -357,26 +282,4 @@ year_proportions <- year_counts %>%
   mutate(proportion = row_count / nrow(joined))
 
 year_proportions
-```
-
-Playing with tracking the year that the value is most different from its typical value at that day of the year.
-
-```{r}
-average_evi <- lsat.pheno.dt %>%
-  group_by(group.id, doy) %>%
-  summarize(avg_evi = mean(spl.fit))
-
-# Merge the average EVI values back to the original dataframe
-a <- merge(lsat.pheno.dt, average_evi, by = c("group.id", "doy"))
-
-# Calculate the difference between each year's EVI value and the average EVI value for that day of the year
-b <- a %>%
-  mutate(evi_difference = spl.fit - avg_evi)
-
-# Find the year with the maximum absolute difference for each farm
-year_of_max_difference <- b %>%
-  group_by(group.id) %>%
-  filter(abs(evi_difference) == max(abs(evi_difference))) %>%
-  select(group.id, year)
-
 ```

@@ -79,6 +79,13 @@ combined_function <- function(joined_df, ALOS_df, group_ids) {
   return(means)
 }
 
+# Only interested in plantations/group.id where the predicted deforestation year from  Landsat was 2015 or later
+alos <- joined %>% 
+  filter(year >= 2015)
+
+# Pull the vector of group.ids
+group.id_vector <- alos$group.id
+
 means <- combined_function(joined, ALOS.df, group.id_vector)
 ```
 

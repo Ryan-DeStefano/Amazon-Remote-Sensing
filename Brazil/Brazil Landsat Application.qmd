@@ -27,7 +27,7 @@ library(ggplot2)
 ```
 
 ```{r}
-read_shapefile <- function(filepath, crs) {
+read_shapefile <- function(filepath, crs, make_valid = F) {
   
   # Read in the file
   file <- st_read(filepath)
@@ -37,6 +37,10 @@ read_shapefile <- function(filepath, crs) {
   
   # Transform to WGS84 (EPSG:4326)
   file <- st_transform(file, crs = crs)
+  
+  if (make_valid == T) {
+    file <- file[st_is_valid(file),]
+  }
 
 }
 
@@ -57,7 +61,7 @@ para <- paracrop %>%
   mutate(estimated_points = Shape_Area / 0.00000006)
 
 # Define the function to sample points from polygons and store in a tibble
-sample_points_from_polygons <- function(dataframe, n_pts_per_polygon) {
+sample_points_from_polygons <- function(df, n_pts_per_polygon) {
   # Create an empty tibble to store the sampled points
   test <- tibble(geometry = vector("list", sum(n_pts_per_polygon)),
                  sample_id = character(sum(n_pts_per_polygon)))
@@ -66,9 +70,9 @@ sample_points_from_polygons <- function(dataframe, n_pts_per_polygon) {
   sample_counter <- 1
 
   # Loop through each region to sample points
-  for (i in 1:nrow(para)) {
+  for (i in 1:nrow(df)) {
     # Sample points from the i-th polygon
-    pts <- st_sample(x = para[i, ], size = n_pts_per_polygon[i])
+    pts <- st_sample(x = df[i, ], size = n_pts_per_polygon[i])
     
     # Convert the sampled points to their WKT representation
     point_wkt <- st_as_text(pts)
