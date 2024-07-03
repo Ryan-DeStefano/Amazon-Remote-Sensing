@@ -1,5 +1,5 @@
 # Amazon-Remote-Sensing
-Project focused on tracking greenness trends of of plantations within the amazon rainforest aiming to find signals of deforestation and ultimately predict deforestation year. Research paper explaining all steps is located here:
+Project focused on tracking greenness trends of of plantations within the amazon rainforest aiming to find signals of deforestation and ultimately predict deforestation year. Research paper explaining all steps is located here, it is recommended to at least skim the paper before diving into the files contained in this repo:
 (Will insert the link to the research paper later).
 
 
@@ -7,28 +7,34 @@ Project focused on tracking greenness trends of of plantations within the amazon
 
 Contains code walking through the usage of the R package, "LandsatTS". This package is the basis of the research and is being changed/adapted to the rainforest setting. Follows directly the steps laid out in https://github.com/logan-berner/LandsatTS?tab=readme-ov-file#4-quantify-growing-season-characteristics
 
+**Helper FUnction Folder:**
+
+Contains all helper functions used in the analysis files
+
 **Brazil Folder:**
 
-Main file for this folder is "Brazil Landasat Application.qmd". Contains code to:
-- Extract evi measurements from landsat satellites for specified points within specified plantations of interest
-- Calibrate the evi measurmenets from multiple Landsat satellites
-- Fit splines to the time series of evi measurmeents dating back to 1984.
-- Plots that summarize the overall trends of evi in these plantations
+Contains the "Landsat Application", "ALOS Application", and "Plotting Plantations" R files. 
+
+The Landsat Application file contains all code for sampling and extracting sample points from the Landsat Satellites for plantations of interest in Brazil, as well as code to analyze the point measurements and obtain predicted deforestation years for each plantation of interest in Brazil.
+
+The ALOS Application file does the same as the Landsat Application file but for measumrents form the ALOS satellite.
+
+The Plotting Plantations file contains simple code to plot and take some sample points from the plantations of interest.
+
+Shapefiles for the plantations of interest are also included.
 
 **Peru Folder:**
 
-Main file for this folder is "Peru Landasat Application.qmd". Contains code to:
-- Extract evi measurements from landsat satellites for specified points within specified plantations of interest
-- Calibrate the evi measurmenets from multiple Landsat satellites
-- Fit splines to the time series of evi measurmeents dating back to 1984.
-- Plots that summarize the overall trends of evi in these plantations
+Contains the "Landsat Application", "ALOS Application", and "Plotting Plantations" R files. 
 
-**Helper Functions Folder:**
+The Landsat Application file contains all code for sampling and extracting sample points from the Landsat Satellites for plantations of interest in Peru, as well as code to analyze the point measurements and obtain predicted deforestation years for each plantation of interest in Brazil.
 
-Contains files for specifying the number of points to sample from each of the plantations and updated version of the lsat_fit_phenological_curves LandsatTS package function.
+The ALOS Application file does the same as the Landsat Application file but for measumrents form the ALOS satellite.
+
+The Plotting Plantations file contains simple code to plot and take some sample points from the plantations of interest.
+
+Shapefiles for the plantations of interest are also included.
 
 **ALOS Folder:**
 
 Contains files for extracting measurmenets from the ALOS satellite rather than the Landsat. 
-Note: Not completely working currently.
-
