@@ -1,6 +1,6 @@
 # Amazon-Remote-Sensing
 Project focused on tracking greenness trends of of plantations within the amazon rainforest aiming to find signals of deforestation and ultimately predict deforestation year. Research paper explaining all steps is located here:
-[Uploading Paper.docx…]()
+(Will insert the link to the research paper later).
 
 
 **LandsatTS Walkthrough Folder:**
